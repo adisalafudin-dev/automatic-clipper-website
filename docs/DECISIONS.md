@@ -25,3 +25,9 @@ Format: `date | decision | reason`
 2026-11-09 | Phase 5 uses Bun.serve, SQLite job history, and an in-process serial queue | Keeps the API local and state durable while preserving concurrency one for CPU-heavy stages
 
 2026-11-09 | Phase 6 uses a static same-origin UI and the existing API module | Avoids a frontend framework while keeping API routes independent of presentation; local upload and clip edits stay in data/
+
+2026-11-09 | Phase 7 uses onnxruntime-node CPU with OpenCV Zoo YuNet for opt-in face tracking | Windows x64 CPU and Bun Node-API work; the verified model is 232589 bytes, no Python is needed, and detection failures retain center crop
+
+2026-11-09 | Phase 7 samples faces every five seconds, smooths crop centers, and leaves center crop as default | Sparse inference limits CPU use and the opt-in keeps existing renders deterministic
+
+2026-11-09 | Phase 7 renders classic/bold/clean caption presets and hook-title overlays in ASS | Keeps caption and title appearance editable without adding another render dependency

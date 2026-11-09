@@ -49,3 +49,12 @@ test("FFmpeg arguments crop, scale, subtitle, normalize, and encode the clip", (
     "-movflags", "+faststart", "clips/clip-01.mp4",
   ]);
 });
+
+test("face crop arguments interpolate the smoothed crop path and clamp it to the frame", () => {
+  const args = buildRenderArgs("video.mp4", "clips/clip.mp4", "captions/clip.ass", 0, 30_000, [
+    { time: 2.5, centerX: 340 },
+    { time: 7.5, centerX: 400 },
+  ]);
+  expect(args[args.indexOf("-vf") + 1]).toContain("if(lt(t\\,2.50)");
+  expect(args[args.indexOf("-vf") + 1]).toContain("iw-ow");
+});

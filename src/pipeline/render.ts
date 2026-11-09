@@ -2,7 +2,10 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import type { Transcript } from "../types.ts";
 import type { ClipCandidate } from "./candidates.ts";
-import { buildAss } from "./captions.ts";
+import { buildAss, type CaptionStyle } from "./captions.ts";
+import { sampleFaceCenters, type FaceCenterSample } from "../vision/faces.ts";
+
+export type ClipRenderEdit = { caption?: string; style?: CaptionStyle; titleOverlay?: boolean };
 
 export type RenderedClip = {
   id: string;
@@ -31,10 +34,27 @@ export function buildRenderArgs(
   assRelative: string,
   start: number,
   end: number,
+  faceCenters: FaceCenterSample[] = [],
 ): string[] {
   const seconds = (ms: number) => (ms / 1000).toFixed(3);
+  let cropX = "(iw-ow)/2";
+  if (faceCenters.length) {
+    let expression = faceCenters.at(-1)!.centerX.toFixed(2);
+    for (let index = faceCenters.length - 2; index >= 0; index--) {
+      const current = faceCenters[index]!;
+      const next = faceCenters[index + 1]!;
+      const span = Math.max(0.001, next.time - current.time);
+      const linear = `${current.centerX.toFixed(2)}+(${(next.centerX - current.centerX).toFixed(2)})*((t-${current.time.toFixed(2)})/${span.toFixed(2)})`;
+      expression = `if(lt(t\\,${next.time.toFixed(2)})\\,${linear}\\,${expression})`;
+    }
+    if (faceCenters.length > 1) {
+      cropX = `min(max(if(lt(t\\,${faceCenters[0]!.time.toFixed(2)})\\,${faceCenters[0]!.centerX.toFixed(2)}\\,${expression})-ow/2\\,0)\\,iw-ow)`;
+    } else {
+      cropX = `min(max(${expression}-ow/2\\,0)\\,iw-ow)`;
+    }
+  }
   const filter = [
-    "crop=w='ih*9/16':h=ih:x='(iw-ow)/2':y=0",
+    `crop=w='ih*9/16':h=ih:x='${cropX}':y=0`,
     "scale=1080:1920",
     `subtitles=filename='${slashPath(assRelative)}'`,
   ].join(",");
@@ -62,7 +82,8 @@ export async function renderClips(
   transcript: Transcript,
   candidates: ClipCandidate[],
   force = false,
-  captionOverrides: Record<string, string> = {},
+  edits: Record<string, ClipRenderEdit> = {},
+  faceTracking = false,
 ): Promise<ClipsManifest> {
   const absoluteJobDir = path.resolve(jobDir);
   const absoluteVideo = path.resolve(videoPath);
@@ -81,7 +102,19 @@ export async function renderClips(
     const outputPath = path.join(clipsDir, filename);
     const captionsPath = path.join(captionsDir, captionsFilename);
 
-    const override = captionOverrides[id]?.trim();
+    const edit = edits[id];
+    let faceCenters: FaceCenterSample[] = [];
+    if (faceTracking) {
+      const trackingStarted = performance.now();
+      try {
+        faceCenters = await sampleFaceCenters(absoluteVideo, candidate.start, candidate.end);
+        console.log(`Face tracking ${id}: ${faceCenters.length} sparse samples in ${((performance.now() - trackingStarted) / 1000).toFixed(2)}s`);
+        if (!faceCenters.length) console.warn(`No face found for ${id}; using center crop`);
+      } catch (error) {
+        console.warn(`Face tracking failed for ${id}; using center crop: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    const override = edit?.caption?.trim();
     const duration = candidate.end - candidate.start;
     const overrideWords = override ? override.split(/\s+/) : [];
     const totalCharacters = overrideWords.reduce((total, word) => total + word.length, 0);
@@ -91,8 +124,13 @@ export async function renderClips(
       const end = candidate.start + Math.max(1, Math.floor(duration * (before + text.length) / totalCharacters));
       return { text, start, end };
     });
-    await Bun.write(captionsPath, buildAss(override ? customWords : transcript.words, candidate.start, candidate.end));
-    if (!force && (await Bun.file(outputPath).exists())) {
+    await Bun.write(captionsPath, buildAss(
+      override ? customWords : transcript.words,
+      candidate.start,
+      candidate.end,
+      { style: edit?.style, title: edit?.titleOverlay ? candidate.title : undefined },
+    ));
+    if (!force && !faceTracking && (await Bun.file(outputPath).exists())) {
       console.log(`Using cached render: ${outputRelative}`);
     } else {
       const args = buildRenderArgs(
@@ -101,8 +139,18 @@ export async function renderClips(
         captionsRelative,
         candidate.start,
         candidate.end,
+        faceCenters,
       );
-      await runFfmpeg(args, absoluteJobDir);
+      try {
+        await runFfmpeg(args, absoluteJobDir);
+      } catch (error) {
+        if (!faceTracking || !faceCenters.length) throw error;
+        console.warn(`Tracked crop render failed for ${id}; retrying center crop: ${error instanceof Error ? error.message : String(error)}`);
+        await runFfmpeg(
+          buildRenderArgs(absoluteVideo, outputRelative, captionsRelative, candidate.start, candidate.end),
+          absoluteJobDir,
+        );
+      }
     }
 
     clips.push({

@@ -1,25 +1,29 @@
 # Progress
 
-Phase: 6 | Branch: phase-6-local-ui | Gate: passed
+Phase: 7 | Branch: phase-7-polish | Gate: passed
 
 ## Done
 
-- Added local video upload, recent jobs, and per-stage progress UI.
-- Added rendered clip previews, trim controls, custom caption edits, and queued rerender.
-- Kept UI static and same-origin; API remains in its own module.
-- `bun run check`: typecheck passed; 22 tests passed, including edited-caption FFmpeg integration.
-- Production server smoke: UI, JS, CSS, and `/health` all returned 200.
+- Added Classic, Bold, and Clean caption presets and optional hook-title overlays.
+- Added opt-in YuNet face tracking through CPU ONNX Runtime; center crop stays default.
+- Sparse five-second samples, smoothed crop path, center fallback, and configurable model path.
+- Added CLI/UI/API opt-in, SQLite migration, model checksum download, and fallback tests.
+- Real smoke: detected face centers locally and rendered one 30.53 s 9:16 tracked clip from cached pipeline artifacts.
+- `bun run check`: typecheck passed; 26 tests passed, including dynamic-crop and edited-caption FFmpeg integration.
+- Production smoke: UI and `/health` returned 200; existing SQLite schema migration passed.
 
 ## Next
 
-- Await user go before the next phase.
+- Await user go before Phase 8.
 
 ## Known bugs / open questions
 
 - `assets/raw/sample.mp4` is a song and yielded no candidates.
-- 9Router aliases may resolve to different response models; hermes-main remains selected.
+- Face tracking quality depends on face size and visibility in the five-second samples.
 
 ## Run
 
 - `bun run check`
-- `bun run start` then open `http://127.0.0.1:3000`
+- `bun run download-face-model` (opt-in face tracking only)
+- `bun run start`
+- `bun run src/cli.ts video.mp4 --face-track`

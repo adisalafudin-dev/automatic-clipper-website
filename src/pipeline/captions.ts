@@ -2,6 +2,7 @@ import type { Word } from "../types.ts";
 
 export type CaptionWord = { text: string; start: number; end: number };
 export type CaptionEvent = { start: number; end: number; words: CaptionWord[] };
+export type CaptionStyle = "classic" | "bold" | "clean";
 
 const SENTENCE_END = /[.!?]["'”’)]*$/;
 
@@ -54,7 +55,18 @@ function escapeAss(text: string): string {
   return text.replaceAll("\\", "\\\\").replaceAll("{", "\\{").replaceAll("}", "\\}");
 }
 
-export function buildAss(words: Word[], clipStart: number, clipEnd: number): string {
+export function buildAss(
+  words: Word[],
+  clipStart: number,
+  clipEnd: number,
+  options: { style?: CaptionStyle; title?: string } = {},
+): string {
+  const style = options.style ?? "classic";
+  const styleLine = style === "bold"
+    ? "Style: Default,Arial,74,&H00FFFFFF,&H007BF2C1,&H00101010,&H90000000,-1,0,1,6,2,2,70,70,150,1"
+    : style === "clean"
+      ? "Style: Default,Arial,58,&H00FFFFFF,&H007BF2C1,&H00101010,&H70000000,0,0,1,2,0,2,76,76,135,1"
+      : "Style: Default,Arial,66,&H00FFFFFF,&H0000FFFF,&H00101010,&H80000000,-1,0,1,4,1,2,70,70,130,1";
   const header = [
     "[Script Info]",
     "ScriptType: v4.00+",
@@ -65,7 +77,7 @@ export function buildAss(words: Word[], clipStart: number, clipEnd: number): str
     "",
     "[V4+ Styles]",
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-    "Style: Default,Arial,66,&H00FFFFFF,&H0000FFFF,&H00101010,&H80000000,-1,0,1,4,1,2,70,70,130,1",
+    styleLine,
     "",
     "[Events]",
     "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
@@ -78,5 +90,10 @@ export function buildAss(words: Word[], clipStart: number, clipEnd: number): str
     }).join(" ");
     return `Dialogue: 0,${assTime(event.start)},${assTime(event.end)},Default,,0,0,0,,${text}`;
   });
+  if (options.title?.trim()) {
+    const title = options.title.trim().replace(/\s+/g, " ");
+    const titleText = title.match(/.{1,28}(?:\s|$)/g)?.map((line) => line.trim()).filter(Boolean).join("\\N") ?? title;
+    events.unshift(`Dialogue: 1,${assTime(0)},${assTime(clipEnd - clipStart)},Default,,0,0,0,,{\\an8\\pos(540,150)\\fs54\\bord3\\shad1}${escapeAss(titleText)}`);
+  }
   return `${[...header, ...events].join("\n")}\n`;
 }

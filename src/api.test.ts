@@ -175,7 +175,10 @@ test("browser upload supports preview, trim and caption edits, and queued rerend
     manifest: { source: "uploaded.mp4", clips: [clip] }, transcriptWords: 1, candidateCount: 1,
   };
   let renderCount = 0;
-  const queue = new JobQueue(store, async (videoPath, jobDir) => {
+  let faceTrackingRequested = false;
+  let rerenderFaceTracking = false;
+  const queue = new JobQueue(store, async (videoPath, jobDir, _force, _report, options) => {
+    faceTrackingRequested = options.faceTracking === true;
     await mkdir(path.join(jobDir, "clips"), { recursive: true });
     await Bun.write(path.join(jobDir, "transcript.json"), JSON.stringify({
       model: "fixture", language: "en", words: [{ text: "hello", start: 0, end: 35_000 }],
@@ -186,13 +189,14 @@ test("browser upload supports preview, trim and caption edits, and queued rerend
     }]));
     await Bun.write(path.join(jobDir, clip.file), "fixture clip");
     return { ...result, manifest: { ...result.manifest, source: videoPath } };
-  }, async (videoPath, _jobDir, report) => {
+  }, async (videoPath, _jobDir, report, faceTracking) => {
     renderCount++;
+    rerenderFaceTracking = faceTracking;
     report("rendering", 0);
     await Bun.sleep(10);
     report("rendering", 100);
     return { ...result, manifest: { ...result.manifest, source: videoPath } };
-  });
+  }, path.join(temp, "jobs"));
   const app = createJobApi(store, queue, {
     uploadDir: path.join(temp, "uploads"), jobRoot: path.join(temp, "jobs"),
   });
@@ -201,10 +205,13 @@ test("browser upload supports preview, trim and caption edits, and queued rerend
   try {
     const form = new FormData();
     form.set("video", new File(["source video"], "uploaded.mp4", { type: "video/mp4" }));
+    form.set("faceTracking", "true");
     const upload = await fetch(`${baseUrl}/jobs`, { method: "POST", body: form });
     expect(upload.status).toBe(202);
     const { job: created } = await upload.json() as { job: { id: string; videoPath: string } };
     await waitForStatus(baseUrl, created.id, "completed");
+    expect(store.get(created.id)!.faceTracking).toBe(true);
+    expect(faceTrackingRequested).toBe(true);
     expect(await Bun.file(created.videoPath).text()).toBe("source video");
 
     const preview = await fetch(`${baseUrl}/jobs/${created.id}/clips/clip-01`);
@@ -213,17 +220,20 @@ test("browser upload supports preview, trim and caption edits, and queued rerend
 
     const edit = await fetch(`${baseUrl}/jobs/${created.id}/clips/clip-01`, {
       method: "PATCH", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ start: 1_000, end: 31_000, caption: "A custom caption" }),
+      body: JSON.stringify({ start: 1_000, end: 31_000, caption: "A custom caption", style: "bold", titleOverlay: true }),
     });
     expect(edit.status).toBe(200);
     const saved = await fetch(`${baseUrl}/jobs/${created.id}`);
-    const savedBody = await saved.json() as { edits: Record<string, string> };
-    expect(savedBody.edits["clip-01"]).toBe("A custom caption");
+    const savedBody = await saved.json() as { edits: Record<string, { caption: string; style: string; titleOverlay: boolean }> };
+    expect(savedBody.edits["clip-01"]!.caption).toBe("A custom caption");
+    expect(savedBody.edits["clip-01"]!.style).toBe("bold");
+    expect(savedBody.edits["clip-01"]!.titleOverlay).toBe(true);
 
     const rerender = await fetch(`${baseUrl}/jobs/${created.id}/render`, { method: "POST" });
     expect(rerender.status).toBe(202);
     await waitForStatus(baseUrl, created.id, "completed");
     expect(renderCount).toBe(1);
+    expect(rerenderFaceTracking).toBe(true);
     const updated = store.get(created.id)!;
     expect(updated.result?.clips).toHaveLength(1);
   } finally {

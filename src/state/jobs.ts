@@ -15,6 +15,7 @@ export type JobStages = Record<PipelineStage, JobStage>;
 export type Job = {
   id: string;
   videoPath: string;
+  faceTracking: boolean;
   status: JobStatus;
   stage: string;
   progress: number;
@@ -28,6 +29,7 @@ export type Job = {
 type JobRow = {
   id: string;
   video_path: string;
+  face_tracking: number;
   status: JobStatus;
   stage: string;
   progress: number;
@@ -49,6 +51,7 @@ function fromRow(row: JobRow): Job {
   return {
     id: row.id,
     videoPath: row.video_path,
+    faceTracking: row.face_tracking === 1,
     status: row.status,
     stage: row.stage,
     progress: row.progress,
@@ -66,6 +69,7 @@ export class JobStore {
       CREATE TABLE IF NOT EXISTS jobs (
         id TEXT PRIMARY KEY,
         video_path TEXT NOT NULL,
+        face_tracking INTEGER NOT NULL DEFAULT 0,
         status TEXT NOT NULL CHECK (status IN ('queued','running','completed','failed')),
         stage TEXT NOT NULL,
         progress INTEGER NOT NULL DEFAULT 0,
@@ -77,15 +81,19 @@ export class JobStore {
       );
       CREATE INDEX IF NOT EXISTS jobs_created_at_idx ON jobs(created_at DESC);
     `);
+    const columns = db.query("PRAGMA table_info(jobs)").all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === "face_tracking")) {
+      db.exec("ALTER TABLE jobs ADD COLUMN face_tracking INTEGER NOT NULL DEFAULT 0");
+    }
   }
 
-  create(id: string, videoPath: string): Job {
+  create(id: string, videoPath: string, faceTracking = false): Job {
     const now = new Date().toISOString();
     const stages = initialStages();
     this.db.query(`
-      INSERT INTO jobs (id, video_path, status, stage, progress, stages_json, created_at, updated_at)
-      VALUES (?, ?, 'queued', 'queued', 0, ?, ?, ?)
-    `).run(id, videoPath, JSON.stringify(stages), now, now);
+      INSERT INTO jobs (id, video_path, face_tracking, status, stage, progress, stages_json, created_at, updated_at)
+      VALUES (?, ?, ?, 'queued', 'queued', 0, ?, ?, ?)
+    `).run(id, videoPath, faceTracking ? 1 : 0, JSON.stringify(stages), now, now);
     return this.get(id)!;
   }
 

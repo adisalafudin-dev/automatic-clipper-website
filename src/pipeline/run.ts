@@ -24,11 +24,14 @@ export type PipelineResult = {
   candidateCount: number;
 };
 
+export type PipelineOptions = { faceTracking?: boolean };
+
 export async function runPipeline(
   videoPath: string,
   jobDir: string,
   force = false,
   reportProgress: PipelineProgress = () => {},
+  options: PipelineOptions = {},
 ): Promise<PipelineResult> {
   const startedAt = performance.now();
   await checkFfmpeg();
@@ -67,7 +70,7 @@ export async function runPipeline(
   });
 
   const manifest = await timedStage("rendering", () =>
-    renderClips(videoPath, jobDir, transcript, candidates, force),
+    renderClips(videoPath, jobDir, transcript, candidates, force, {}, options.faceTracking === true),
   );
   console.log(`Total: ${((performance.now() - startedAt) / 1000).toFixed(2)}s`);
   return { manifest, transcriptWords: transcript.words.length, candidateCount: candidates.length };

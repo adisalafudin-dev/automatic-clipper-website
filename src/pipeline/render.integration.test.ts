@@ -3,10 +3,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { Transcript } from "../types.ts";
-import { renderClips } from "./render.ts";
+import { buildRenderArgs, renderClips } from "./render.ts";
 
-async function run(args: string[]): Promise<string> {
-  const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
+async function run(args: string[], cwd?: string): Promise<string> {
+  const proc = Bun.spawn(args, { cwd, stdout: "pipe", stderr: "pipe" });
   const [stdout, stderr, code] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
@@ -45,10 +45,12 @@ test("renders a tiny FFmpeg fixture as captioned 9:16 normalized video with edit
       title: "Fixture",
       score: 8,
       reason: "Integration fixture",
-    }], false, { "clip-01": "A custom caption line" });
+    }], false, { "clip-01": { caption: "A custom caption line", style: "bold", titleOverlay: true } });
     expect(manifest.clips).toHaveLength(1);
     const editedAss = await Bun.file(path.join(jobDir, "captions", "clip-01.ass")).text();
     expect(editedAss).toContain("custom");
+    expect(editedAss).toContain("Fixture");
+    expect(editedAss).toContain("&H007BF2C1");
     expect(editedAss).not.toContain("Test");
 
     const probeText = await run([
@@ -68,6 +70,18 @@ test("renders a tiny FFmpeg fixture as captioned 9:16 normalized video with edit
     expect(audio?.channels).toBe(1);
     expect(Number(probe.format.duration)).toBeGreaterThan(1.8);
     expect(Number(probe.format.duration)).toBeLessThan(2.2);
+
+    const trackedArgs = buildRenderArgs(source, "clips/tracked.mp4", "captions/clip-01.ass", 0, 2_000, [
+      { time: 0.5, centerX: 120 }, { time: 1.5, centerX: 190 },
+    ]);
+    await run(trackedArgs, jobDir);
+    const trackedProbe = await run([
+      "ffprobe", "-v", "error", "-show_entries", "stream=width,height", "-of", "json",
+      path.join(jobDir, "clips", "tracked.mp4"),
+    ]);
+    const trackedStreams = (JSON.parse(trackedProbe) as { streams: Array<{ width: number; height: number }> }).streams;
+    expect(trackedStreams[0]!.width).toBe(1080);
+    expect(trackedStreams[0]!.height).toBe(1920);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }

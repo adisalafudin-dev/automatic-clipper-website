@@ -11,6 +11,6 @@ Open `http://127.0.0.1:3000` for the local UI. Upload a video to create a job, w
 
 The API remains available at the same origin: `GET /health`, `POST /jobs`, and `GET /jobs/:id` report readiness, submit jobs, and return queued/running/completed/failed status, per-stage progress, and the final manifest.
 
-The CLI caches audio, transcript, and candidate outputs under `data/jobs/<video-name>`. It writes rendered vertical clips and `clips.json` under that job folder. Pass `--force` after the video path to rerun cached stages.
+The CLI caches audio, transcript, and candidate outputs under `data/jobs/<video-name>`. It writes rendered vertical clips and `clips.json` under that job folder. Pass `--force` after the video path to rerun cached stages. The UI offers Classic, Bold, and Clean caption presets plus a hook-title overlay. Face tracking is opt-in: run `bun run download-face-model`, then use `bun run src/cli.ts video.mp4 --face-track`. The UI has the same opt-in checkbox. It samples every five seconds, smooths the crop path, and falls back to center crop if detection or tracked rendering fails; without the model it also falls back.
 
 Compare the Phase 4 aliases with `bun run src/compare.ts --models hermes-main,hermes-gemini,hermes-nvidia-ollama`. Defaults exclude the sensitive `Lets Talk.mp4`, use the other four raw videos plus the cached `your-video` transcript, and write per-model results under `data/jobs/<video-name>/comparisons`. Use `--prepare` to only extract and transcribe.
