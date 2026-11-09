@@ -63,10 +63,10 @@ export function buildAss(
 ): string {
   const style = options.style ?? "classic";
   const styleLine = style === "bold"
-    ? "Style: Default,Arial,74,&H00FFFFFF,&H007BF2C1,&H00101010,&H90000000,-1,0,1,6,2,2,70,70,150,1"
+    ? "Style: Default,Arial,74,&H00FFFFFF,&H007BF2C1,&H00101010,&H90000000,-1,0,1,6,2,5,70,70,0,1"
     : style === "clean"
-      ? "Style: Default,Arial,58,&H00FFFFFF,&H007BF2C1,&H00101010,&H70000000,0,0,1,2,0,2,76,76,135,1"
-      : "Style: Default,Arial,66,&H00FFFFFF,&H0000FFFF,&H00101010,&H80000000,-1,0,1,4,1,2,70,70,130,1";
+      ? "Style: Default,Arial,58,&H00FFFFFF,&H007BF2C1,&H00101010,&H70000000,0,0,1,2,0,5,76,76,0,1"
+      : "Style: Default,Arial,66,&H00FFFFFF,&H0000FFFF,&H00101010,&H80000000,-1,0,1,4,1,5,70,70,0,1";
   const header = [
     "[Script Info]",
     "ScriptType: v4.00+",

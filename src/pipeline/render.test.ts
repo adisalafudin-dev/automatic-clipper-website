@@ -34,6 +34,7 @@ test("ASS subtitles have per-word karaoke highlighting and clip-relative timesta
   ], 0, 800);
   expect(ass).toContain("PlayResX: 1080");
   expect(ass).toContain("&H0000FFFF");
+  expect(ass).toContain("Style: Default,Arial,66,&H00FFFFFF,&H0000FFFF,&H00101010,&H80000000,-1,0,1,4,1,5,70,70,0,1");
   expect(ass).toContain("Dialogue: 0,0:00:00.00,0:00:00.75");
   expect(ass).toContain("{\\k25}A {\\k50}\\{safe\\}");
 });

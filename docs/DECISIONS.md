@@ -31,3 +31,5 @@ Format: `date | decision | reason`
 2026-11-09 | Phase 7 samples faces every five seconds, smooths crop centers, and leaves center crop as default | Sparse inference limits CPU use and the opt-in keeps existing renders deterministic
 
 2026-11-09 | Phase 7 renders classic/bold/clean caption presets and hook-title overlays in ASS | Keeps caption and title appearance editable without adding another render dependency
+
+2026-11-09 | Caption presets use vertical and horizontal center alignment | Keeps subtitles in the center safe area, away from short-video account labels and controls near the bottom
