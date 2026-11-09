@@ -151,6 +151,15 @@ Exit check: one command turns `video.mp4` into N clips plus `clips.json`. `ffpro
 
 **Phase 7: Polish.** Face-tracked reframing, caption styles, hook-title overlay.
 
+**Phase 8: Dockerize.** Dockerfile (Bun base image, Linux ffmpeg, a Linux whisper.cpp `whisper-cli` build), `.dockerignore`, `docker-compose.yml`, run notes in `README.md`.
+Rules:
+- Target is Linux containers on Docker Desktop (Windows). The Windows-only rules in section 10 apply to running on the host, not inside the container.
+- Do not bake secrets, `.env`, Whisper models, or videos into the image. Pass `.env` at runtime and mount models and `data/` as volumes.
+- 9Router runs on my phone on termux with the IP of 192.168.1.19 and port 5678 .
+- Whisper binary and model paths are configurable by env, with Linux defaults in the container.
+- One container for API + UI + worker. Keep render concurrency at 1.
+Exit check: `docker compose up` on a clean checkout processes a sample video end to end, the clips match a non-Docker run, `data/` persists across restarts, and the image contains no secrets.
+
 Do not start the next phase until I say "go".
 
 ## 12. Legal
