@@ -21,3 +21,7 @@ Format: `date | decision | reason`
 2026-11-09 | Phase 4 compares aliases sequentially with per-video/model caches and adds factuality/privacy guidance to the selection prompt | Sequential calls avoid overlapping gateway load and reruns; grounded hooks reduce unsupported or sensitive third-party framing
 
 2026-11-09 | Phase 4 default: hermes-main | It was fastest on the four speech inputs (39.2 s average) with comparable candidate count and model self-score; 9Router may route to different responding models
+
+2026-11-09 | Phase 5 uses Bun.serve, SQLite job history, and an in-process serial queue | Keeps the API local and state durable while preserving concurrency one for CPU-heavy stages
+
+2026-11-09 | Phase 6 uses a static same-origin UI and the existing API module | Avoids a frontend framework while keeping API routes independent of presentation; local upload and clip edits stay in data/

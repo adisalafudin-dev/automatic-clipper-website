@@ -62,6 +62,7 @@ export async function renderClips(
   transcript: Transcript,
   candidates: ClipCandidate[],
   force = false,
+  captionOverrides: Record<string, string> = {},
 ): Promise<ClipsManifest> {
   const absoluteJobDir = path.resolve(jobDir);
   const absoluteVideo = path.resolve(videoPath);
@@ -80,7 +81,17 @@ export async function renderClips(
     const outputPath = path.join(clipsDir, filename);
     const captionsPath = path.join(captionsDir, captionsFilename);
 
-    await Bun.write(captionsPath, buildAss(transcript.words, candidate.start, candidate.end));
+    const override = captionOverrides[id]?.trim();
+    const duration = candidate.end - candidate.start;
+    const overrideWords = override ? override.split(/\s+/) : [];
+    const totalCharacters = overrideWords.reduce((total, word) => total + word.length, 0);
+    const customWords = overrideWords.map((text, wordIndex) => {
+      const before = overrideWords.slice(0, wordIndex).reduce((total, word) => total + word.length, 0);
+      const start = candidate.start + Math.floor(duration * before / totalCharacters);
+      const end = candidate.start + Math.max(1, Math.floor(duration * (before + text.length) / totalCharacters));
+      return { text, start, end };
+    });
+    await Bun.write(captionsPath, buildAss(override ? customWords : transcript.words, candidate.start, candidate.end));
     if (!force && (await Bun.file(outputPath).exists())) {
       console.log(`Using cached render: ${outputRelative}`);
     } else {

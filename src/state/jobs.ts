@@ -107,6 +107,12 @@ export class JobStore {
     ]);
   }
 
+  requeue(id: string): void {
+    this.update(id, `
+      UPDATE jobs SET status='queued', stage='queued', progress=0, error=NULL, updated_at=? WHERE id=?
+    `, [new Date().toISOString(), id]);
+  }
+
   updateProgress(id: string, stage: PipelineStage, stageProgress: number): void {
     const job = this.get(id);
     if (!job) return;

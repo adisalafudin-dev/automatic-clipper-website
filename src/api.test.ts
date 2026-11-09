@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createJobApi } from "./api.ts";
@@ -155,6 +155,77 @@ test("pipeline errors are persisted as failed jobs", async () => {
     const failed = store.get(job.id)!;
     expect(failed.error).toBe("Transcription failed");
     expect(failed.stages.transcription.status).toBe("failed");
+  } finally {
+    server.stop?.();
+    db.close();
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("browser upload supports preview, trim and caption edits, and queued rerender", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "clipper-ui-api-"));
+  const db = new Database(":memory:");
+  const store = new JobStore(db);
+  const clip = {
+    id: "clip-01", file: "clips/clip-01.mp4", captions: "captions/clip-01.ass",
+    start: 0, end: 30_000, duration: 30_000, startSentenceId: 1, endSentenceId: 1,
+    title: "Test highlight", hook: "A clean test hook", score: 8, reason: "Fixture",
+  };
+  const result: PipelineResult = {
+    manifest: { source: "uploaded.mp4", clips: [clip] }, transcriptWords: 1, candidateCount: 1,
+  };
+  let renderCount = 0;
+  const queue = new JobQueue(store, async (videoPath, jobDir) => {
+    await mkdir(path.join(jobDir, "clips"), { recursive: true });
+    await Bun.write(path.join(jobDir, "transcript.json"), JSON.stringify({
+      model: "fixture", language: "en", words: [{ text: "hello", start: 0, end: 35_000 }],
+    }));
+    await Bun.write(path.join(jobDir, "candidates.json"), JSON.stringify([{
+      startSentenceId: 1, endSentenceId: 1, hook: clip.hook, title: clip.title,
+      score: clip.score, reason: clip.reason, start: 0, end: 30_000,
+    }]));
+    await Bun.write(path.join(jobDir, clip.file), "fixture clip");
+    return { ...result, manifest: { ...result.manifest, source: videoPath } };
+  }, async (videoPath, _jobDir, report) => {
+    renderCount++;
+    report("rendering", 0);
+    await Bun.sleep(10);
+    report("rendering", 100);
+    return { ...result, manifest: { ...result.manifest, source: videoPath } };
+  });
+  const app = createJobApi(store, queue, {
+    uploadDir: path.join(temp, "uploads"), jobRoot: path.join(temp, "jobs"),
+  });
+  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: app.fetch });
+  const baseUrl = `http://127.0.0.1:${server.port}`;
+  try {
+    const form = new FormData();
+    form.set("video", new File(["source video"], "uploaded.mp4", { type: "video/mp4" }));
+    const upload = await fetch(`${baseUrl}/jobs`, { method: "POST", body: form });
+    expect(upload.status).toBe(202);
+    const { job: created } = await upload.json() as { job: { id: string; videoPath: string } };
+    await waitForStatus(baseUrl, created.id, "completed");
+    expect(await Bun.file(created.videoPath).text()).toBe("source video");
+
+    const preview = await fetch(`${baseUrl}/jobs/${created.id}/clips/clip-01`);
+    expect(preview.status).toBe(200);
+    expect(await preview.text()).toBe("fixture clip");
+
+    const edit = await fetch(`${baseUrl}/jobs/${created.id}/clips/clip-01`, {
+      method: "PATCH", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ start: 1_000, end: 31_000, caption: "A custom caption" }),
+    });
+    expect(edit.status).toBe(200);
+    const saved = await fetch(`${baseUrl}/jobs/${created.id}`);
+    const savedBody = await saved.json() as { edits: Record<string, string> };
+    expect(savedBody.edits["clip-01"]).toBe("A custom caption");
+
+    const rerender = await fetch(`${baseUrl}/jobs/${created.id}/render`, { method: "POST" });
+    expect(rerender.status).toBe(202);
+    await waitForStatus(baseUrl, created.id, "completed");
+    expect(renderCount).toBe(1);
+    const updated = store.get(created.id)!;
+    expect(updated.result?.clips).toHaveLength(1);
   } finally {
     server.stop?.();
     db.close();

@@ -5,6 +5,7 @@ import { checkFfmpeg } from "./ffmpeg/check.ts";
 import { createJobApi } from "./api.ts";
 import { JobQueue } from "./state/queue.ts";
 import { JobStore } from "./state/jobs.ts";
+import { uiResponse } from "./ui.ts";
 
 async function main() {
   await checkFfmpeg();
@@ -20,7 +21,7 @@ async function main() {
   const server = Bun.serve({
     hostname: process.env.HOST ?? "127.0.0.1",
     port: rawPort,
-    fetch: createJobApi(store, queue).fetch,
+    fetch: async (request) => (await uiResponse(request)) ?? createJobApi(store, queue).fetch(request),
   });
   console.log(`Video Clipper API listening at http://${server.hostname}:${server.port}`);
 

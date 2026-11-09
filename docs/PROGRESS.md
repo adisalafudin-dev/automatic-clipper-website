@@ -1,28 +1,25 @@
 # Progress
 
-## Current position
-
-- Phase: 4 (Model comparison) | Branch: phase-4-model-comparison | Gate: passed
+Phase: 6 | Branch: phase-6-local-ui | Gate: passed
 
 ## Done
 
-- Comparison runner caches per-input/model results and runs aliases sequentially.
-- Compared hermes-main, hermes-gemini, and hermes-nvidia-ollama on the four raw speech/test inputs plus the prior your-video transcript.
-- Excluded Lets Talk.mp4 and replaced it at user direction; no further calls used its transcript.
-- Summary and default selection: docs/PHASE4_MODEL_COMPARISON.md; selected hermes-main.
-- Tuned prompt for factual concise hooks and privacy; comparison still reflects the baseline prompt.
-- `bun run check`: typecheck passed; 17 tests passed.
+- Added local video upload, recent jobs, and per-stage progress UI.
+- Added rendered clip previews, trim controls, custom caption edits, and queued rerender.
+- Kept UI static and same-origin; API remains in its own module.
+- `bun run check`: typecheck passed; 22 tests passed, including edited-caption FFmpeg integration.
+- Production server smoke: UI, JS, CSS, and `/health` all returned 200.
 
 ## Next
 
-- Await user go before Phase 5.
+- Await user go before the next phase.
 
 ## Known bugs / open questions
 
 - `assets/raw/sample.mp4` is a song and yielded no candidates.
-- 9Router aliases may resolve to different response models; prompt v2 awaits evaluation.
+- 9Router aliases may resolve to different response models; hermes-main remains selected.
 
 ## Run
 
 - `bun run check`
-- `bun run src/compare.ts --models hermes-main,hermes-gemini,hermes-nvidia-ollama`
+- `bun run start` then open `http://127.0.0.1:3000`

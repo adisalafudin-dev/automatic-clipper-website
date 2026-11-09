@@ -4,8 +4,12 @@ Run `bun install`, then set `LLM_API_KEY` and optionally `LLM_BASE_URL` in `.env
 
 ```bash
 bun run check
-bun run src/cli.ts your-video.mp4
+bun run start
 ```
+
+Open `http://127.0.0.1:3000` for the local UI. Upload a video to create a job, watch stage progress, preview clips, edit their trim and captions, then rerender. Set `HOST` or `PORT` to change the listener.
+
+The API remains available at the same origin: `GET /health`, `POST /jobs`, and `GET /jobs/:id` report readiness, submit jobs, and return queued/running/completed/failed status, per-stage progress, and the final manifest.
 
 The CLI caches audio, transcript, and candidate outputs under `data/jobs/<video-name>`. It writes rendered vertical clips and `clips.json` under that job folder. Pass `--force` after the video path to rerun cached stages.
 

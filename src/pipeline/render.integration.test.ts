@@ -16,7 +16,7 @@ async function run(args: string[]): Promise<string> {
   return stdout;
 }
 
-test("renders a tiny FFmpeg fixture as captioned 9:16 normalized video", async () => {
+test("renders a tiny FFmpeg fixture as captioned 9:16 normalized video with editable captions", async () => {
   const temp = await mkdtemp(path.join(os.tmpdir(), "clipper-render-"));
   try {
     const source = path.join(temp, "fixture.mp4");
@@ -45,8 +45,11 @@ test("renders a tiny FFmpeg fixture as captioned 9:16 normalized video", async (
       title: "Fixture",
       score: 8,
       reason: "Integration fixture",
-    }]);
+    }], false, { "clip-01": "A custom caption line" });
     expect(manifest.clips).toHaveLength(1);
+    const editedAss = await Bun.file(path.join(jobDir, "captions", "clip-01.ass")).text();
+    expect(editedAss).toContain("custom");
+    expect(editedAss).not.toContain("Test");
 
     const probeText = await run([
       "ffprobe", "-v", "error", "-show_entries",
