@@ -9,7 +9,7 @@ Phase: 7 | Branch: phase-7-polish | Gate: passed
 - Sparse five-second samples, smoothed crop path, center fallback, and configurable model path.
 - Added CLI/UI/API opt-in, SQLite migration, model checksum download, and fallback tests.
 - Real smoke: detected face centers locally and rendered one 30.53 s 9:16 tracked clip from cached pipeline artifacts.
-- `bun run check`: typecheck passed; 27 tests passed, including dynamic-crop, edited-caption, and 129 MiB streaming-upload coverage.
+- `bun run check`: typecheck passed; 28 tests passed, including dynamic-crop, edited-caption, 129 MiB streaming, and multipart-compatibility coverage.
 - Production smoke: UI and `/health` returned 200; existing SQLite schema migration passed.
 
 ## Next

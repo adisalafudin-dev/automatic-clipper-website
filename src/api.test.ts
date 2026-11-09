@@ -280,3 +280,26 @@ test("streaming upload accepts a video larger than Bun's default 128 MiB body li
     await rm(temp, { recursive: true, force: true });
   }
 });
+
+test("multipart uploads from an already-open Phase 6 browser still work", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "clipper-multipart-compat-"));
+  const db = new Database(":memory:");
+  const store = new JobStore(db);
+  const queue = new JobQueue(store, async () => fixtureResult());
+  const app = createJobApi(store, queue, { uploadDir: path.join(temp, "uploads"), jobRoot: path.join(temp, "jobs") });
+  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, maxRequestBodySize: 2_000_000_000, fetch: app.fetch });
+  try {
+    const form = new FormData();
+    form.set("video", new File(["legacy browser upload"], "small.mp4", { type: "video/mp4" }));
+    form.set("faceTracking", "false");
+    const response = await fetch(`http://127.0.0.1:${server.port}/jobs`, { method: "POST", body: form });
+    expect(response.status).toBe(202);
+    const { job } = await response.json() as { job: { id: string; videoPath: string } };
+    expect(await Bun.file(job.videoPath).text()).toBe("legacy browser upload");
+    await waitForStatus(`http://127.0.0.1:${server.port}`, job.id, "completed");
+  } finally {
+    server.stop?.();
+    db.close();
+    await rm(temp, { recursive: true, force: true });
+  }
+});

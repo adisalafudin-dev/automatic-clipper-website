@@ -35,27 +35,49 @@ export function createJobApi(
         let videoPath: string;
         let force = false;
         let faceTracking = request.headers.get("x-face-tracking") === "true";
-        if (request.headers.get("content-type")?.startsWith("application/octet-stream")) {
-          let filename: string;
+        const contentType = request.headers.get("content-type") ?? "";
+        let uploadName: string | undefined;
+        let uploadBody: ReadableStream<Uint8Array> | null = null;
+        let uploadSize: number | undefined;
+        if (contentType.includes("multipart/form-data")) {
+          let uploadFile: File | null;
           try {
-            filename = decodeURIComponent(request.headers.get("x-video-filename") ?? "").trim();
+            const form = await request.formData();
+            const entry = form.get("video");
+            uploadFile = entry instanceof File ? entry : null;
+            faceTracking = form.get("faceTracking") === "true";
+          } catch {
+            return json({ error: "Upload must be valid multipart form data" }, 400);
+          }
+          if (!uploadFile) return json({ error: "Multipart upload must include a video file" }, 400);
+          uploadName = uploadFile.name;
+          uploadBody = uploadFile.stream();
+          uploadSize = uploadFile.size;
+          if (uploadSize === 0) return json({ error: "Video upload body is empty" }, 400);
+        } else if (request.headers.has("x-video-filename")) {
+          try {
+            uploadName = decodeURIComponent(request.headers.get("x-video-filename") ?? "").trim();
           } catch {
             return json({ error: "x-video-filename must be URL-encoded" }, 400);
           }
-          if (!filename) return json({ error: "x-video-filename is required" }, 400);
+          if (!uploadName) return json({ error: "x-video-filename is required" }, 400);
+          uploadBody = request.body;
+          if (!uploadBody) return json({ error: "Video upload body is empty" }, 400);
           const contentLength = Number(request.headers.get("content-length") ?? "0");
           if (contentLength > MAX_UPLOAD_BYTES) return json({ error: "Video upload must be under 2 GB" }, 413);
-          const extension = path.extname(filename).toLowerCase();
+        }
+
+        if (uploadName && uploadBody) {
+          const extension = path.extname(uploadName).toLowerCase();
           if (![".mp4", ".mov", ".mkv", ".webm", ".m4v"].includes(extension)) {
             return json({ error: "Upload a video file in MP4, MOV, MKV, WEBM, or M4V format" }, 400);
           }
-          if (!request.body) return json({ error: "Video upload body is empty" }, 400);
           await mkdir(uploadDir, { recursive: true });
           videoPath = path.resolve(uploadDir, `${randomUUID()}${extension}`);
           let received = 0;
           const output = Bun.file(videoPath).writer();
           try {
-            const reader = request.body.getReader();
+            const reader = uploadBody.getReader();
             while (true) {
               const { done, value } = await reader.read();
               if (done) break;
@@ -64,6 +86,7 @@ export function createJobApi(
               await output.write(value);
             }
             await output.end();
+            if (uploadSize !== undefined && received !== uploadSize) throw new Error("Multipart video upload was incomplete");
             if (received === 0) throw new Error("Video upload body is empty");
           } catch (error) {
             try {
@@ -76,6 +99,9 @@ export function createJobApi(
             return json({ error: message }, message.includes("2 GB") ? 413 : 400);
           }
         } else {
+          if (contentType && !contentType.includes("application/json")) {
+            return json({ error: "Use a video file upload or send application/json with videoPath" }, 415);
+          }
           let payload: unknown;
           try {
             payload = await request.json();

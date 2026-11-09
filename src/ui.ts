@@ -14,5 +14,10 @@ export async function uiResponse(request: Request): Promise<Response | null> {
   const filePath = path.join(import.meta.dir, "..", "web", filename);
   const file = Bun.file(filePath);
   if (!(await file.exists())) return new Response("UI asset not found", { status: 404 });
-  return new Response(file, { headers: { "content-type": contentTypes[path.extname(filename)]! } });
+  return new Response(file, {
+    headers: {
+      "content-type": contentTypes[path.extname(filename)]!,
+      "cache-control": "no-store, max-age=0",
+    },
+  });
 }

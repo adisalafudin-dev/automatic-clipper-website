@@ -12,6 +12,7 @@ test("local UI serves its workspace page and frontend assets", async () => {
     const page = await fetch(baseUrl);
     expect(page.status).toBe(200);
     expect(page.headers.get("content-type")).toContain("text/html");
+    expect(page.headers.get("cache-control")).toContain("no-store");
     expect(await page.text()).toContain("Drop your video here");
 
     const script = await fetch(`${baseUrl}/app.js`);
