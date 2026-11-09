@@ -1,11 +1,13 @@
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { JobQueue } from "./state/queue.ts";
 import { JobStore } from "./state/jobs.ts";
 import type { ClipCandidate } from "./pipeline/candidates.ts";
 import type { ClipRenderEdit } from "./pipeline/render.ts";
 import type { Transcript } from "./types.ts";
+
+const MAX_UPLOAD_BYTES = 2_000_000_000;
 
 function json(body: unknown, status = 200, headers?: Record<string, string>): Response {
   return Response.json(body, { status, headers });
@@ -32,27 +34,47 @@ export function createJobApi(
       if (url.pathname === "/jobs" && request.method === "POST") {
         let videoPath: string;
         let force = false;
-        let faceTracking = false;
-        if (request.headers.get("content-type")?.includes("multipart/form-data")) {
-          let file: File | null;
+        let faceTracking = request.headers.get("x-face-tracking") === "true";
+        if (request.headers.get("content-type")?.startsWith("application/octet-stream")) {
+          let filename: string;
           try {
-            const form = await request.formData();
-            const entry = form.get("video");
-            file = entry instanceof File ? entry : null;
-          faceTracking = form.get("faceTracking") === "true";
+            filename = decodeURIComponent(request.headers.get("x-video-filename") ?? "").trim();
           } catch {
-            return json({ error: "Upload must be valid multipart form data" }, 400);
+            return json({ error: "x-video-filename must be URL-encoded" }, 400);
           }
-          if (!file || file.size === 0 || file.size > 2_000_000_000) {
-            return json({ error: "video must be a non-empty file under 2 GB" }, 400);
-          }
-          const extension = path.extname(file.name).toLowerCase();
+          if (!filename) return json({ error: "x-video-filename is required" }, 400);
+          const contentLength = Number(request.headers.get("content-length") ?? "0");
+          if (contentLength > MAX_UPLOAD_BYTES) return json({ error: "Video upload must be under 2 GB" }, 413);
+          const extension = path.extname(filename).toLowerCase();
           if (![".mp4", ".mov", ".mkv", ".webm", ".m4v"].includes(extension)) {
             return json({ error: "Upload a video file in MP4, MOV, MKV, WEBM, or M4V format" }, 400);
           }
+          if (!request.body) return json({ error: "Video upload body is empty" }, 400);
           await mkdir(uploadDir, { recursive: true });
           videoPath = path.resolve(uploadDir, `${randomUUID()}${extension}`);
-          await Bun.write(videoPath, file);
+          let received = 0;
+          const output = Bun.file(videoPath).writer();
+          try {
+            const reader = request.body.getReader();
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              received += value.byteLength;
+              if (received > MAX_UPLOAD_BYTES) throw new Error("Video upload exceeds the 2 GB limit");
+              await output.write(value);
+            }
+            await output.end();
+            if (received === 0) throw new Error("Video upload body is empty");
+          } catch (error) {
+            try {
+              await output.end();
+            } catch {
+              // The output stream may already be closed after a failed write.
+            }
+            await rm(videoPath, { force: true });
+            const message = error instanceof Error ? error.message : String(error);
+            return json({ error: message }, message.includes("2 GB") ? 413 : 400);
+          }
         } else {
           let payload: unknown;
           try {

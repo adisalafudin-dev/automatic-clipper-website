@@ -164,10 +164,15 @@ form.addEventListener("submit", async (event) => {
   submitButton.disabled = true;
   showNotice("Uploading video and adding it to the queue…");
   try {
-    const body = new FormData();
-    body.set("video", file);
-    body.set("faceTracking", String(document.querySelector("#face-tracking").checked));
-    const { job } = await request("/jobs", { method: "POST", body });
+    const { job } = await request("/jobs", {
+      method: "POST",
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-video-filename": encodeURIComponent(file.name),
+        "x-face-tracking": String(document.querySelector("#face-tracking").checked),
+      },
+      body: file,
+    });
     selectedId = job.id;
     showNotice("Video queued. Progress will update here.");
     await loadProjects();

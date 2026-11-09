@@ -203,10 +203,15 @@ test("browser upload supports preview, trim and caption edits, and queued rerend
   const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: app.fetch });
   const baseUrl = `http://127.0.0.1:${server.port}`;
   try {
-    const form = new FormData();
-    form.set("video", new File(["source video"], "uploaded.mp4", { type: "video/mp4" }));
-    form.set("faceTracking", "true");
-    const upload = await fetch(`${baseUrl}/jobs`, { method: "POST", body: form });
+    const upload = await fetch(`${baseUrl}/jobs`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-video-filename": "uploaded.mp4",
+        "x-face-tracking": "true",
+      },
+      body: new File(["source video"], "uploaded.mp4", { type: "video/mp4" }),
+    });
     expect(upload.status).toBe(202);
     const { job: created } = await upload.json() as { job: { id: string; videoPath: string } };
     await waitForStatus(baseUrl, created.id, "completed");
@@ -236,6 +241,39 @@ test("browser upload supports preview, trim and caption edits, and queued rerend
     expect(rerenderFaceTracking).toBe(true);
     const updated = store.get(created.id)!;
     expect(updated.result?.clips).toHaveLength(1);
+  } finally {
+    server.stop?.();
+    db.close();
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("streaming upload accepts a video larger than Bun's default 128 MiB body limit", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "clipper-large-upload-"));
+  const input = path.join(temp, "large.mp4");
+  const expectedSize = 129 * 1024 * 1024;
+  const writer = Bun.file(input).writer();
+  const chunk = new Uint8Array(1024 * 1024);
+  for (let index = 0; index < 129; index++) await writer.write(chunk);
+  await writer.end();
+
+  const db = new Database(":memory:");
+  const store = new JobStore(db);
+  const queue = new JobQueue(store, async () => fixtureResult());
+  const app = createJobApi(store, queue, { uploadDir: path.join(temp, "uploads"), jobRoot: path.join(temp, "jobs") });
+  const server = Bun.serve({
+    hostname: "127.0.0.1", port: 0, maxRequestBodySize: 2_000_000_000, fetch: app.fetch,
+  });
+  try {
+    const response = await fetch(`http://127.0.0.1:${server.port}/jobs`, {
+      method: "POST",
+      headers: { "content-type": "application/octet-stream", "x-video-filename": "large.mp4" },
+      body: Bun.file(input),
+    });
+    expect(response.status).toBe(202);
+    const { job } = await response.json() as { job: { id: string; videoPath: string } };
+    expect((await Bun.file(job.videoPath).stat()).size).toBe(expectedSize);
+    await waitForStatus(`http://127.0.0.1:${server.port}`, job.id, "completed");
   } finally {
     server.stop?.();
     db.close();

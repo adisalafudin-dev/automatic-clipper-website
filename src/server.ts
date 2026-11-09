@@ -21,6 +21,7 @@ async function main() {
   const server = Bun.serve({
     hostname: process.env.HOST ?? "127.0.0.1",
     port: rawPort,
+    maxRequestBodySize: 2_000_000_000,
     fetch: async (request) => (await uiResponse(request)) ?? createJobApi(store, queue).fetch(request),
   });
   console.log(`Video Clipper API listening at http://${server.hostname}:${server.port}`);
