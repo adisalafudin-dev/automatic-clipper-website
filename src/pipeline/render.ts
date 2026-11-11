@@ -7,7 +7,7 @@ import { keepSpans, outputOffsetMs, spanDuration, wordsOnOutputTimeline, type So
 import { sampleFaceCenters, type FaceCenterSample } from "../vision/faces.ts";
 
 export type LayoutPreset = "crop" | "blurred" | "stacked";
-export type ClipRenderEdit = { caption?: string; style?: CaptionStyle; titleOverlay?: boolean; layout?: LayoutPreset };
+export type ClipRenderEdit = { startMs?: number; endMs?: number; caption?: string; style?: CaptionStyle; titleOverlay?: boolean; layout?: LayoutPreset; origStartMs?: number; origEndMs?: number };
 
 export type RenderedClip = {
   id: string;

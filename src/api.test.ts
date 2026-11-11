@@ -306,11 +306,22 @@ test("browser upload supports preview, trim and caption edits, and queued rerend
     });
     expect(edit.status).toBe(200);
     const saved = await fetch(`${baseUrl}/jobs/${created.id}`);
-    const savedBody = await saved.json() as { edits: Record<string, { caption: string; style: string; titleOverlay: boolean; layout?: string }> };
+    const savedBody = await saved.json() as { edits: Record<string, { caption: string; style: string; titleOverlay: boolean; layout?: string; origStartMs: number; origEndMs: number }> };
     expect(savedBody.edits["clip-01"]!.caption).toBe("A custom caption");
     expect(savedBody.edits["clip-01"]!.style).toBe("bold");
     expect(savedBody.edits["clip-01"]!.titleOverlay).toBe(true);
     expect(savedBody.edits["clip-01"]!.layout).toBe("blurred");
+    expect(savedBody.edits["clip-01"]!.origStartMs).toBe(0);
+    expect(savedBody.edits["clip-01"]!.origEndMs).toBe(30_000);
+
+    const shortTrim = await fetch(`${baseUrl}/jobs/${created.id}/clips/clip-01`, {
+      method: "PATCH", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ startMs: 1_000, endMs: 10_000, caption: "A custom caption" }),
+    });
+    expect(shortTrim.status).toBe(200);
+    const trimmed = await fetch(`${baseUrl}/jobs/${created.id}`);
+    const trimmedBody = await trimmed.json() as { edits: Record<string, { startMs: number; endMs: number; origStartMs: number; origEndMs: number }> };
+    expect(trimmedBody.edits["clip-01"]).toMatchObject({ startMs: 1_000, endMs: 10_000, origStartMs: 0, origEndMs: 30_000 });
 
     const rerender = await fetch(`${baseUrl}/jobs/${created.id}/render`, { method: "POST" });
     expect(rerender.status).toBe(202);

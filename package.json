@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "bun test src",
+    "test": "bun test src web",
     "typecheck": "tsc --noEmit",
     "check": "bun run typecheck && bun run test",
     "dev": "bun --hot src/server.ts",

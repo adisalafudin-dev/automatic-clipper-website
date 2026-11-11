@@ -44,6 +44,10 @@ export type JobView = JobListItem & {
 };
 
 export type UiClipEdit = {
+  startMs?: number;
+  endMs?: number;
+  origStartMs?: number;
+  origEndMs?: number;
   caption?: string;
   captionWords?: Array<{ wordIndex: number; text: string }>;
   style?: "classic" | "bold" | "clean";

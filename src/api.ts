@@ -301,8 +301,8 @@ export function createJobApi(
         } catch {
           return json({ error: "Request body must be valid JSON" }, 400);
         }
-        if (!isRecord(payload) || typeof payload.start !== "number" || typeof payload.end !== "number" || typeof payload.caption !== "string") {
-          return json({ error: "start, end, and caption are required" }, 400);
+        if (!isRecord(payload) || typeof (payload.startMs ?? payload.start) !== "number" || typeof (payload.endMs ?? payload.end) !== "number" || typeof payload.caption !== "string") {
+          return json({ error: "startMs, endMs, and caption are required" }, 400);
         }
         if (payload.style !== undefined && !["classic", "bold", "clean"].includes(String(payload.style))) {
           return json({ error: "style must be classic, bold, or clean" }, 400);
@@ -316,10 +316,10 @@ export function createJobApi(
         const clipIndex = job.result.clips.findIndex((item) => item.id === editMatch[2]);
         if (clipIndex < 0) return json({ error: "Clip not found" }, 404);
         const oldClip = job.result.clips[clipIndex]!;
-        const start = payload.start;
-        const end = payload.end;
-        if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end - start < 30_000 || end - start > 90_000) {
-          return json({ error: "Trim must be between 30 and 90 seconds with a non-negative start" }, 400);
+        const start = (payload.startMs ?? payload.start) as number;
+        const end = (payload.endMs ?? payload.end) as number;
+        if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start) {
+          return json({ error: "Trim must have a non-negative start before its end" }, 400);
         }
         if (payload.caption.length > 2_000) return json({ error: "Caption text must be at most 2000 characters" }, 400);
         const jobDir = path.join(jobRoot, jobId);
@@ -338,10 +338,14 @@ export function createJobApi(
         }
         const previous = edits[oldClip.id] ?? {};
         edits[oldClip.id] = {
+          startMs: start,
+          endMs: end,
           caption: payload.caption.trim(),
           style: (payload.style as ClipRenderEdit["style"] | undefined) ?? previous.style ?? "classic",
           titleOverlay: (payload.titleOverlay as boolean | undefined) ?? previous.titleOverlay ?? false,
           layout: (payload.layout as ClipRenderEdit["layout"] | undefined) ?? previous.layout ?? "crop",
+          origStartMs: previous.origStartMs ?? oldClip.start,
+          origEndMs: previous.origEndMs ?? oldClip.end,
         };
         await writeFile(path.join(jobDir, "edits.json"), JSON.stringify(edits, null, 2));
         return json({ ok: true, edits });
