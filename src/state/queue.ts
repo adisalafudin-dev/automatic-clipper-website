@@ -20,11 +20,12 @@ type QueueItem = {
   force: boolean;
   operation?: "pipeline" | "render";
   faceTracking?: boolean;
+  clipId?: string;
 };
 
-type RenderRunner = (videoPath: string, jobDir: string, report: PipelineProgress, faceTracking: boolean) => Promise<PipelineResult>;
+type RenderRunner = (videoPath: string, jobDir: string, report: PipelineProgress, faceTracking: boolean, clipId?: string) => Promise<PipelineResult>;
 
-async function renderExisting(videoPath: string, jobDir: string, report: PipelineProgress, faceTracking: boolean): Promise<PipelineResult> {
+async function renderExisting(videoPath: string, jobDir: string, report: PipelineProgress, faceTracking: boolean, clipId?: string): Promise<PipelineResult> {
   report("rendering", 0);
   const transcript = JSON.parse(await readFile(path.join(jobDir, "transcript.json"), "utf8")) as Transcript;
   const candidates = JSON.parse(await readFile(path.join(jobDir, "candidates.json"), "utf8")) as ClipCandidate[];
@@ -34,7 +35,9 @@ async function renderExisting(videoPath: string, jobDir: string, report: Pipelin
   } catch (error) {
     if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
   }
-  const manifest = await renderClips(videoPath, jobDir, transcript, candidates, true, edits, faceTracking);
+  const selected = clipId ? candidates.filter((candidate, index) => (candidate.id ?? `clip-${String(index + 1).padStart(2, "0")}`) === clipId) : candidates;
+  if (clipId && !selected.length) throw new Error(`Clip ${clipId} is missing its candidate data`);
+  const manifest = await renderClips(videoPath, jobDir, transcript, selected, true, edits, faceTracking);
   report("rendering", 100);
   return { manifest, transcriptWords: transcript.words.length, candidateCount: candidates.length };
 }
@@ -67,9 +70,15 @@ export class JobQueue {
           const report = (stage: Parameters<typeof this.store.updateProgress>[1], progress: number) =>
             this.store.updateProgress(item.id, stage, progress);
           const result = item.operation === "render"
-            ? await this.renderer(item.videoPath, jobDir, report, item.faceTracking === true)
+            ? await this.renderer(item.videoPath, jobDir, report, item.faceTracking === true, item.clipId)
             : await this.pipeline(item.videoPath, jobDir, item.force, report, { faceTracking: item.faceTracking === true });
-          this.store.complete(item.id, result.manifest);
+          if (item.clipId) {
+            const current = this.store.get(item.id)?.result;
+            const updated = result.manifest.clips[0];
+            if (!current || !updated) throw new Error(`Clip ${item.clipId} render result could not be merged`);
+            const clips = current.clips.map((clip) => clip.id === item.clipId ? updated : clip);
+            this.store.complete(item.id, { ...current, clips });
+          } else this.store.complete(item.id, result.manifest);
         } catch (error) {
           this.store.fail(item.id, error instanceof Error ? error.message : String(error));
         }

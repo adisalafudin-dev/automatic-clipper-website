@@ -37,3 +37,5 @@ Format: `date | decision | reason`
 2026-11-11 | Phase 7 layout presets are center crop, blurred background with a fitted foreground, and two stacked fitted panels | Offers common vertical treatments through the existing per-clip edit and rerender flow, with crop remaining the default.
 2026-11-11 | The FFmpeg render integration test has a 20-second per-test timeout | It runs several real 1080x1920 renders and exceeded Bun's generic 5-second test timeout on this Windows host; all output assertions remain active.
 2026-11-11 | Continue with UI-spec.md after Phase 7 and before Phase 8 | The user explicitly requested the UI specification work and Dockerization without pausing at phase gates.
+2026-11-11 | Keep UI API routes under the existing `/jobs` prefix and add the missing source, transcript, clip, and range behavior there | Preserves existing browser and CLI compatibility while satisfying the UI flows.
+2026-11-11 | Typecheck and test project files only; `bun run test` targets `src` and TypeScript excludes the untracked `whisper.cpp` tree | Keeps this repository's checks isolated from a separate source tree present in the workspace.

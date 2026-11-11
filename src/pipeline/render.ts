@@ -165,7 +165,7 @@ export async function renderClips(
 
   const clips: RenderedClip[] = [];
   for (const [index, candidate] of candidates.entries()) {
-    const id = `clip-${String(index + 1).padStart(2, "0")}`;
+    const id = candidate.id ?? `clip-${String(index + 1).padStart(2, "0")}`;
     const filename = `${id}.mp4`;
     const captionsFilename = `${id}.ass`;
     const outputRelative = slashPath(path.join("clips", filename));

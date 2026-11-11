@@ -150,6 +150,12 @@ export class JobStore {
     `, [JSON.stringify(stages), JSON.stringify(result), new Date().toISOString(), id]);
   }
 
+  updateResult(id: string, result: ClipsManifest): void {
+    this.update(id, "UPDATE jobs SET result_json=?, updated_at=? WHERE id=?", [
+      JSON.stringify(result), new Date().toISOString(), id,
+    ]);
+  }
+
   fail(id: string, error: string): void {
     const job = this.get(id);
     if (!job) return;

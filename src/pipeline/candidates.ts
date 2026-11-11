@@ -10,6 +10,7 @@ export type ProposedCandidate = {
 };
 
 export type ClipCandidate = ProposedCandidate & {
+  id?: string;
   start: number;
   end: number;
 };

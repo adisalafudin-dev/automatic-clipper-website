@@ -6,6 +6,7 @@ import { JobStore } from "./state/jobs.ts";
 import type { ClipCandidate } from "./pipeline/candidates.ts";
 import type { ClipRenderEdit } from "./pipeline/render.ts";
 import type { Transcript } from "./types.ts";
+import { transcriptSentences } from "./pipeline/sentences.ts";
 
 const MAX_UPLOAD_BYTES = 2_000_000_000;
 
@@ -15,6 +16,28 @@ function json(body: unknown, status = 200, headers?: Record<string, string>): Re
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+async function mediaResponse(filePath: string, contentType: string, request: Request): Promise<Response> {
+  const file = Bun.file(filePath);
+  if (!(await file.exists())) return json({ error: "Media file not found" }, 404);
+  const range = request.headers.get("range");
+  const baseHeaders = { "content-type": contentType, "accept-ranges": "bytes", "cache-control": "no-store" };
+  if (!range) return new Response(file, { headers: { ...baseHeaders, "content-length": String(file.size) } });
+  const match = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+  if (!match || (!match[1] && !match[2])) {
+    return new Response(null, { status: 416, headers: { "content-range": `bytes */${file.size}`, ...baseHeaders } });
+  }
+  const suffixLength = match[1] ? undefined : Number(match[2]);
+  const start = match[1] ? Number(match[1]) : Math.max(0, file.size - (suffixLength ?? 0));
+  const end = match[2] && match[1] ? Math.min(Number(match[2]), file.size - 1) : file.size - 1;
+  if (!Number.isSafeInteger(start) || start < 0 || start >= file.size || end < start) {
+    return new Response(null, { status: 416, headers: { "content-range": `bytes */${file.size}`, ...baseHeaders } });
+  }
+  return new Response(file.slice(start, end + 1), {
+    status: 206,
+    headers: { ...baseHeaders, "content-length": String(end - start + 1), "content-range": `bytes ${start}-${end}/${file.size}` },
+  });
 }
 
 export function createJobApi(
@@ -156,15 +179,112 @@ export function createJobApi(
         return json({ job, edits });
       }
 
-      const clipMatch = url.pathname.match(/^\/jobs\/([^/]+)\/clips\/(clip-\d{2})$/);
-      if (clipMatch && request.method === "GET") {
-        const job = store.get(decodeURIComponent(clipMatch[1]!));
+      const transcriptMatch = url.pathname.match(/^\/jobs\/([^/]+)\/transcript$/);
+      if (transcriptMatch && request.method === "GET") {
+        const job = store.get(decodeURIComponent(transcriptMatch[1]!));
+        if (!job) return json({ error: "Job not found" }, 404);
+        const transcript = JSON.parse(await readFile(path.join(jobRoot, job.id, "transcript.json"), "utf8")) as Transcript;
+        const sentences = transcriptSentences(transcript).map((sentence) => ({
+          ...sentence,
+          words: transcript.words.filter((word) => word.start < sentence.end && word.end > sentence.start),
+        }));
+        return json({ sentences });
+      }
+
+      const sourceMatch = url.pathname.match(/^\/jobs\/([^/]+)\/source$/);
+      if (sourceMatch && request.method === "GET") {
+        const job = store.get(decodeURIComponent(sourceMatch[1]!));
+        if (!job) return json({ error: "Job not found" }, 404);
+        const extension = path.extname(job.videoPath).toLowerCase();
+        const contentType = extension === ".webm" ? "video/webm" : extension === ".mov" ? "video/quicktime" : "video/mp4";
+        return mediaResponse(job.videoPath, contentType, request);
+      }
+
+      const clipsCollection = url.pathname.match(/^\/jobs\/([^/]+)\/clips$/);
+      if (clipsCollection && request.method === "POST") {
+        const jobId = decodeURIComponent(clipsCollection[1]!);
+        const job = store.get(jobId);
+        if (!job?.result || job.status !== "completed") return json({ error: "Completed job not found" }, 404);
+        let payload: unknown;
+        try { payload = await request.json(); } catch { return json({ error: "Request body must be valid JSON" }, 400); }
+        if (!isRecord(payload) || typeof payload.startMs !== "number" || typeof payload.endMs !== "number") {
+          return json({ error: "startMs and endMs are required" }, 400);
+        }
+        const startMs = payload.startMs as number;
+        const endMs = payload.endMs as number;
+        const transcript = JSON.parse(await readFile(path.join(jobRoot, jobId, "transcript.json"), "utf8")) as Transcript;
+        const sentences = transcriptSentences(transcript);
+        const startSentence = sentences.find((sentence) => sentence.start <= startMs && sentence.end > startMs);
+        const endSentence = [...sentences].reverse().find((sentence) => sentence.start < endMs && sentence.end >= endMs);
+        if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || !startSentence || !endSentence || endSentence.id < startSentence.id) {
+          return json({ error: "Selection must fall within the transcript" }, 400);
+        }
+        const start = startSentence.start;
+        const end = endSentence.end;
+        if (end - start < 30_000 || end - start > 90_000) return json({ error: "Clip must be between 30 and 90 seconds" }, 400);
+        const candidates = JSON.parse(await readFile(path.join(jobRoot, jobId, "candidates.json"), "utf8")) as ClipCandidate[];
+        const existingIds = candidates.map((candidate, index) => candidate.id ?? `clip-${String(index + 1).padStart(2, "0")}`);
+        const maxId = existingIds.reduce((max, id) => Math.max(max, Number(id.match(/^clip-(\d+)$/)?.[1] ?? 0)), 0);
+        const id = `clip-${String(maxId + 1).padStart(2, "0")}`;
+        const candidate: ClipCandidate = {
+          id, startSentenceId: startSentence.id, endSentenceId: endSentence.id,
+          start, end, hook: "", title: "New clip", score: 0, reason: "Created from transcript selection",
+        };
+        await writeFile(path.join(jobRoot, jobId, "candidates.json"), JSON.stringify([...candidates, candidate], null, 2));
+        const manifestClip = {
+          id, file: `clips/${id}.mp4`, captions: `captions/${id}.ass`, start, end, duration: end - start,
+          startSentenceId: candidate.startSentenceId, endSentenceId: candidate.endSentenceId,
+          title: candidate.title, hook: candidate.hook, score: candidate.score, reason: candidate.reason,
+        };
+        const manifest = { ...job.result, clips: [...job.result.clips, manifestClip] };
+        store.updateResult(jobId, manifest);
+        return json({ clip: manifestClip }, 201);
+      }
+
+      const sourceClipMatch = url.pathname.match(/^\/jobs\/([^/]+)\/clips\/(clip-\d{2})(?:\/file)?$/);
+      if (sourceClipMatch && request.method === "GET") {
+        const job = store.get(decodeURIComponent(sourceClipMatch[1]!));
         if (!job?.result || job.status !== "completed") return json({ error: "Clip not found" }, 404);
-        const clip = job.result.clips.find((item) => item.id === clipMatch[2]);
+        const clip = job.result.clips.find((item) => item.id === sourceClipMatch[2]);
         if (!clip) return json({ error: "Clip not found" }, 404);
         const file = Bun.file(path.join(jobRoot, job.id, clip.file));
         if (!(await file.exists())) return json({ error: "Rendered clip file not found" }, 404);
-        return new Response(file, { headers: { "content-type": "video/mp4", "cache-control": "no-store" } });
+        return mediaResponse(path.join(jobRoot, job.id, clip.file), "video/mp4", request);
+      }
+
+      const deleteClipMatch = url.pathname.match(/^\/jobs\/([^/]+)\/clips\/(clip-\d{2})$/);
+      if (deleteClipMatch && request.method === "DELETE") {
+        const jobId = decodeURIComponent(deleteClipMatch[1]!);
+        const job = store.get(jobId);
+        if (!job?.result || job.status !== "completed") return json({ error: "Completed job not found" }, 404);
+        const clipId = deleteClipMatch[2]!;
+        if (!job.result.clips.some((clip) => clip.id === clipId)) return json({ error: "Clip not found" }, 404);
+        const jobDir = path.join(jobRoot, jobId);
+        const candidates = JSON.parse(await readFile(path.join(jobDir, "candidates.json"), "utf8")) as ClipCandidate[];
+        const retained = candidates.filter((candidate, index) => (candidate.id ?? `clip-${String(index + 1).padStart(2, "0")}`) !== clipId);
+        await writeFile(path.join(jobDir, "candidates.json"), JSON.stringify(retained, null, 2));
+        let edits: Record<string, ClipRenderEdit> = {};
+        try { edits = JSON.parse(await readFile(path.join(jobDir, "edits.json"), "utf8")) as Record<string, ClipRenderEdit>; }
+        catch (error) { if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error; }
+        delete edits[clipId];
+        await writeFile(path.join(jobDir, "edits.json"), JSON.stringify(edits, null, 2));
+        for (const relative of [`clips/${clipId}.mp4`, `captions/${clipId}.ass`]) {
+          await rm(path.join(jobDir, relative), { force: true });
+        }
+        const manifest = { ...job.result, clips: job.result.clips.filter((clip) => clip.id !== clipId) };
+        store.updateResult(jobId, manifest);
+        return json({ ok: true, clips: manifest.clips });
+      }
+
+      const renderClipMatch = url.pathname.match(/^\/jobs\/([^/]+)\/clips\/(clip-\d{2})\/render$/);
+      if (renderClipMatch && request.method === "POST") {
+        const jobId = decodeURIComponent(renderClipMatch[1]!);
+        const job = store.get(jobId);
+        if (!job?.result || job.status !== "completed") return json({ error: "Completed job not found" }, 404);
+        if (!job.result.clips.some((clip) => clip.id === renderClipMatch[2])) return json({ error: "Clip not found" }, 404);
+        store.requeue(jobId);
+        queue.enqueue({ id: jobId, videoPath: job.videoPath, force: true, operation: "render", faceTracking: job.faceTracking, clipId: renderClipMatch[2] });
+        return json({ job: store.get(jobId) }, 202);
       }
 
       const editMatch = url.pathname.match(/^\/jobs\/([^/]+)\/clips\/(clip-\d{2})$/);

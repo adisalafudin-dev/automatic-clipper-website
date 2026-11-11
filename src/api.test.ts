@@ -7,6 +7,7 @@ import { createJobApi } from "./api.ts";
 import type { PipelineResult } from "./pipeline/run.ts";
 import { JobQueue } from "./state/queue.ts";
 import { JobStore } from "./state/jobs.ts";
+import type { ClipCandidate } from "./pipeline/candidates.ts";
 
 function fixtureResult(): PipelineResult {
   return {
@@ -83,6 +84,82 @@ test("HTTP API accepts jobs, exposes persisted stage progress, and returns resul
     expect((await fetch(`${baseUrl}/jobs/not-a-job`)).status).toBe(404);
   } finally {
     server.stop?.();
+    db.close();
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("UI endpoints serve byte ranges, transcript sentences, and create, render, and delete clips", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "clipper-ui-api-"));
+  const jobId = "ui-job";
+  const sourcePath = path.join(temp, "source.mp4");
+  const jobDir = path.join(temp, "jobs", jobId);
+  await mkdir(path.join(jobDir, "clips"), { recursive: true });
+  await mkdir(path.join(jobDir, "captions"), { recursive: true });
+  await Bun.write(sourcePath, new Uint8Array([97, 98, 99, 100, 101, 102]));
+  await Bun.write(path.join(jobDir, "clips", "clip-01.mp4"), new Uint8Array([49, 50, 51, 52]));
+  await Bun.write(path.join(jobDir, "transcript.json"), JSON.stringify({
+    model: "test", language: "en", words: [
+      { text: "First", start: 0, end: 15_000 },
+      { text: "sentence.", start: 15_500, end: 31_000 },
+    ],
+  }));
+  const initial: ClipCandidate = {
+    id: "clip-01", startSentenceId: 0, endSentenceId: 0, start: 0, end: 31_000,
+    hook: "Existing", title: "Existing clip", score: 8, reason: "Fixture",
+  };
+  await Bun.write(path.join(jobDir, "candidates.json"), JSON.stringify([initial]));
+  const db = new Database(":memory:");
+  const store = new JobStore(db);
+  store.create(jobId, sourcePath);
+  const rendered = {
+    id: "clip-01", file: "clips/clip-01.mp4", captions: "captions/clip-01.ass", start: 0, end: 31_000,
+    duration: 31_000, startSentenceId: 0, endSentenceId: 0, title: "Existing clip", hook: "Existing", score: 8, reason: "Fixture",
+  };
+  store.complete(jobId, { source: sourcePath, clips: [rendered] });
+  const queue = new JobQueue(store, async () => fixtureResult(), async (videoPath, _jobDir, report, _faceTracking, clipId) => {
+    report("rendering", 100);
+    const resultClip = { ...rendered, id: clipId ?? rendered.id, title: "New clip", startSentenceId: 0, endSentenceId: 0 };
+    return { manifest: { source: videoPath, clips: [resultClip] }, transcriptWords: 2, candidateCount: 1 };
+  }, path.join(temp, "jobs"));
+  const app = createJobApi(store, queue, { jobRoot: path.join(temp, "jobs") });
+  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: app.fetch });
+  const baseUrl = `http://127.0.0.1:${server.port}`;
+  try {
+    const source = await fetch(`${baseUrl}/jobs/${jobId}/source`, { headers: { range: "bytes=1-3" } });
+    expect(source.status).toBe(206);
+    expect(source.headers.get("content-range")).toBe("bytes 1-3/6");
+    expect(await source.text()).toBe("bcd");
+    const badRange = await fetch(`${baseUrl}/jobs/${jobId}/source`, { headers: { range: "bytes=9-10" } });
+    expect(badRange.status).toBe(416);
+
+    const transcript = await fetch(`${baseUrl}/jobs/${jobId}/transcript`);
+    const transcriptBody = await transcript.json() as { sentences: Array<{ id: number; start: number; end: number; words: unknown[] }> };
+    expect(transcriptBody.sentences).toHaveLength(1);
+    expect(transcriptBody.sentences[0]).toMatchObject({ id: 0, start: 0, end: 31_000 });
+    expect(transcriptBody.sentences[0]!.words).toHaveLength(2);
+
+    const clipFile = await fetch(`${baseUrl}/jobs/${jobId}/clips/clip-01/file`, { headers: { range: "bytes=1-2" } });
+    expect(clipFile.status).toBe(206);
+    expect(await clipFile.text()).toBe("23");
+
+    const created = await fetch(`${baseUrl}/jobs/${jobId}/clips`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ startMs: 1_000, endMs: 30_000 }),
+    });
+    expect(created.status).toBe(201);
+    expect((await created.json() as { clip: { id: string } }).clip.id).toBe("clip-02");
+
+    const render = await fetch(`${baseUrl}/jobs/${jobId}/clips/clip-02/render`, { method: "POST" });
+    expect(render.status).toBe(202);
+    await waitForStatus(baseUrl, jobId, "completed");
+    expect(store.get(jobId)!.result!.clips.map((clip) => clip.id)).toEqual(["clip-01", "clip-02"]);
+
+    const deleted = await fetch(`${baseUrl}/jobs/${jobId}/clips/clip-01`, { method: "DELETE" });
+    expect(deleted.status).toBe(200);
+    expect(store.get(jobId)!.result!.clips.map((clip) => clip.id)).toEqual(["clip-02"]);
+  } finally {
+    server.stop(true);
     db.close();
     await rm(temp, { recursive: true, force: true });
   }
