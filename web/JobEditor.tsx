@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { JobView, UiClipEdit, UiSentence } from "../src/types.ts";
-import { getTranscript, renderClip, renderStale, saveClipEdit } from "./api.ts";
-import { clampRange, durationWarning, formatTime, parseTime, snapRangeToWords, type TimeRange } from "./lib/trim.ts";
+import { createClip, getTranscript, removeClip, renderClip, renderStale, saveClipEdit } from "./api.ts";
+import { clampRange, durationWarning, formatTime, parseTime, sentenceSelectionRange, snapRangeToWords, type TimeRange } from "./lib/trim.ts";
 
 type JobDetail = { job: JobView; edits: Record<string, UiClipEdit> };
-type Props = { detail: JobDetail; onEditSaved: () => void };
+type Props = { detail: JobDetail; onEditSaved: () => Promise<void> };
 
 const clock = (ms: number) => formatTime(ms).slice(0, -4);
 
@@ -22,6 +22,8 @@ export function JobEditor({ detail, onEditSaved }: Props) {
   const [startText, setStartText] = useState(formatTime(clips[0]?.start ?? 0));
   const [endText, setEndText] = useState(formatTime(clips[0]?.end ?? 0));
   const [captionDraft, setCaptionDraft] = useState<Record<number, string>>({});
+  const [selectedSentenceIds, setSelectedSentenceIds] = useState<number[]>([]);
+  const selectionAnchor = useRef<number | null>(null);
   const dirty = useRef(false);
   const captionDirty = useRef(false);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -126,6 +128,39 @@ export function JobEditor({ detail, onEditSaved }: Props) {
     setCaptionDraft((current) => ({ ...current, [wordIndex]: text }));
     captionDirty.current = true;
   };
+  const selectSentence = (sentenceId: number, extend: boolean) => {
+    if (extend && selectionAnchor.current !== null) {
+      const low = Math.min(selectionAnchor.current, sentenceId);
+      const high = Math.max(selectionAnchor.current, sentenceId);
+      setSelectedSentenceIds(sentences.filter((sentence) => sentence.id >= low && sentence.id <= high).map((sentence) => sentence.id));
+    } else {
+      setSelectedSentenceIds((current) => current.includes(sentenceId)
+        ? current.filter((id) => id !== sentenceId)
+        : [...current, sentenceId].sort((a, b) => a - b));
+    }
+    selectionAnchor.current = sentenceId;
+  };
+  const addSelectedClip = async () => {
+    const selection = sentenceSelectionRange(sentences, selectedSentenceIds);
+    if (!selection) return;
+    try {
+      await createClip(job.id, selection.startMs, selection.endMs);
+      setSelectedSentenceIds([]);
+      await onEditSaved();
+    } catch (reason) {
+      setLoadError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+  const deleteSelectedClip = async () => {
+    if (!selected || !window.confirm(`Delete ${selected.title}?`)) return;
+    try {
+      await removeClip(job.id, selected.id);
+      setSelectedId("");
+      await onEditSaved();
+    } catch (reason) {
+      setLoadError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
 
   return <section className="editor-shell" aria-label="Job editor">
     <header className="editor-heading"><div><span className="eyebrow">JOB EDITOR</span><h2>{job.filename}</h2></div><div className="editor-actions"><button className="button" disabled={job.status === "running" || job.status === "queued"} onClick={() => void renderStale(job.id).then(onEditSaved).catch((reason: unknown) => setLoadError(reason instanceof Error ? reason.message : String(reason)))}>Render all stale</button><span className={`badge ${job.status}`}>{job.status}</span></div></header>
@@ -156,19 +191,17 @@ export function JobEditor({ detail, onEditSaved }: Props) {
           <div className="range-wrap"><input aria-label="Clip start range" type="range" min="0" max={windowSpan} step="100" value={Math.min(windowSpan, Math.max(0, range.startMs - windowStart))} onChange={(event) => updateRange({ ...range, startMs: windowStart + Number(event.currentTarget.value) })} /><input aria-label="Clip end range" type="range" min="0" max={windowSpan} step="100" value={Math.min(windowSpan, Math.max(0, range.endMs - windowStart))} onChange={(event) => updateRange({ ...range, endMs: windowStart + Number(event.currentTarget.value) })} /></div>
           <div className="trim-actions"><button onClick={() => updateRange({ ...range, startMs: playhead })}>Start = playhead</button><button onClick={() => updateRange({ ...range, endMs: playhead })}>End = playhead</button><button onClick={() => updateRange({ ...range, startMs: range.startMs - 100 })}>Start −100 ms</button><button onClick={() => updateRange({ ...range, startMs: range.startMs + 100 })}>Start +100 ms</button><button onClick={() => updateRange({ ...range, endMs: range.endMs - 100 })}>End −100 ms</button><button onClick={() => updateRange({ ...range, endMs: range.endMs + 100 })}>End +100 ms</button><button onClick={() => { if (videoRef.current) videoRef.current.currentTime = range.startMs / 1000; }}>Jump to start</button><button onClick={() => { if (videoRef.current) videoRef.current.currentTime = range.endMs / 1000; }}>Jump to end</button><button onClick={() => updateRange({ startMs: detail.edits[selected.id]?.origStartMs ?? selected.start, endMs: detail.edits[selected.id]?.origEndMs ?? selected.end })}>Reset</button><label><input type="checkbox" checked={snap} onChange={(event) => setSnap(event.currentTarget.checked)} /> Snap to words</label></div>
           <p className="trim-status">Duration {formatTime(range.endMs - range.startMs)} · {saveState}{warning && <span className="warning"> · Outside 30–90 sec</span>}</p>
-          <div className="render-controls"><button className="button primary" disabled={job.status === "running" || job.status === "queued" || renderStatus === "queued" || renderStatus === "rendering"} onClick={() => void renderClip(job.id, selected.id).then(onEditSaved).catch((reason: unknown) => setLoadError(reason instanceof Error ? reason.message : String(reason)))}>{renderStatus === "queued" || renderStatus === "rendering" ? "Rendering…" : renderStatus === "done" ? "Render again" : "Render clip"}</button><span className={`badge ${renderStatus}`}>{renderStatus}</span></div>
+          <div className="render-controls"><button className="button primary" disabled={job.status === "running" || job.status === "queued" || renderStatus === "queued" || renderStatus === "rendering"} onClick={() => void renderClip(job.id, selected.id).then(onEditSaved).catch((reason: unknown) => setLoadError(reason instanceof Error ? reason.message : String(reason)))}>{renderStatus === "queued" || renderStatus === "rendering" ? "Rendering…" : renderStatus === "done" ? "Render again" : "Render clip"}</button><span className={`badge ${renderStatus}`}>{renderStatus}</span><button className="button danger" disabled={job.status === "running" || job.status === "queued"} onClick={() => void deleteSelectedClip()}>Delete clip</button></div>
           {detail.edits[selected.id]?.renderError && <p className="error" role="alert">{detail.edits[selected.id]!.renderError}</p>}
           {renderStatus === "done" && <div className="rendered-result"><h4>Rendered clip</h4><video controls preload="metadata" src={`/jobs/${encodeURIComponent(job.id)}/clips/${encodeURIComponent(selected.id)}/file`} /><a href={`/jobs/${encodeURIComponent(job.id)}/clips/${encodeURIComponent(selected.id)}/file`} download={`${selected.id}.mp4`}>Download clip</a></div>}
         </> : <p className="muted">Select a clip to preview.</p>}
       </section>
-      <aside className="editor-column transcript-column"><h3>Transcript & captions</h3>{sentences.length ? <div className="transcript-list">{sentences.map((sentence) => {
-        const words = sentence.words.filter((word) => word.end > range.startMs && word.start < range.endMs);
-        if (!words.length) return null;
-        return <div className={`caption-line ${currentSentence?.id === sentence.id ? "current" : ""}`} key={sentence.id}><span className="line-time">{clock(sentence.start)}</span><div>{words.map((word, wordIndex) => {
+      <aside className="editor-column transcript-column"><div className="transcript-heading"><h3>Transcript & captions</h3><button className="button" disabled={!selectedSentenceIds.length} onClick={() => void addSelectedClip()}>Create clip from selection</button></div>{selectedSentenceIds.length > 0 && <p className="selection-hint">{selectedSentenceIds.length} sentence{selectedSentenceIds.length === 1 ? "" : "s"} selected · Shift-click to extend</p>}{sentences.length ? <div className="transcript-list">{sentences.map((sentence) => <div className={`caption-line ${currentSentence?.id === sentence.id ? "current" : ""} ${selectedSentenceIds.includes(sentence.id) ? "selected-sentence" : ""}`} key={sentence.id}><button className="sentence-selector" onClick={(event) => selectSentence(sentence.id, event.shiftKey)} aria-pressed={selectedSentenceIds.includes(sentence.id)}><span>{clock(sentence.start)}</span>{sentence.text}</button><div className="caption-line-words">{sentence.words.map((word, wordIndex) => {
           const index = word.wordIndex ?? wordIndex;
-          return <span className={`caption-word ${playhead >= word.start && playhead <= word.end ? "playing" : ""}`} key={index}><button type="button" onClick={() => { if (videoRef.current) videoRef.current.currentTime = word.start / 1000; }}>{word.text}</button><input aria-label={`Edit word ${word.text}`} value={captionDraft[index] ?? word.text} onChange={(event) => updateCaptionWord(index, event.currentTarget.value)} /></span>;
-        })}</div></div>;
-      })}</div> : <p className="muted">Transcript will appear when transcription completes.</p>}</aside>
+          const editable = word.end > range.startMs && word.start < range.endMs;
+          const text = captionDraft[index] ?? word.text;
+          return <span className={`caption-word ${playhead >= word.start && playhead <= word.end ? "playing" : ""}`} key={index}><button type="button" onClick={() => { if (videoRef.current) videoRef.current.currentTime = word.start / 1000; }}>{text || "(removed)"}</button>{editable && <input aria-label={`Edit word ${word.text}`} value={text} onChange={(event) => updateCaptionWord(index, event.currentTarget.value)} />}</span>;
+        })}</div></div>)}</div> : <p className="muted">Transcript will appear when transcription completes.</p>}<details className="shortcut-help"><summary>Keyboard shortcuts</summary><p>Space play/pause · [ / ] set trim · ← / → nudge 100 ms · Shift + ← / → nudge 1 sec · L loop</p></details></aside>
     </div>
   </section>;
 }

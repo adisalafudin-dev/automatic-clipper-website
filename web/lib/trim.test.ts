@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { clampRange, durationWarning, formatTime, parseTime, snapRangeToWords } from "./trim.ts";
+import { clampRange, durationWarning, formatTime, parseTime, sentenceSelectionRange, snapRangeToWords } from "./trim.ts";
 
 test("clamps trim endpoints to the source duration and preserves a positive interval", () => {
   expect(clampRange({ startMs: -100, endMs: 40_000 }, 31_000)).toEqual({ startMs: 0, endMs: 31_000 });
@@ -22,4 +22,12 @@ test("warns outside the preferred clip duration without clamping it", () => {
   expect(durationWarning({ startMs: 0, endMs: 29_999 })).toBe("too-short");
   expect(durationWarning({ startMs: 0, endMs: 90_001 })).toBe("too-long");
   expect(durationWarning({ startMs: 0, endMs: 30_000 })).toBeNull();
+});
+
+test("maps selected sentence IDs to the enclosing time range", () => {
+  expect(sentenceSelectionRange([
+    { id: 1, text: "One", start: 100, end: 200, words: [] },
+    { id: 2, text: "Two", start: 250, end: 500, words: [] },
+  ], [2, 1])).toEqual({ startMs: 100, endMs: 500 });
+  expect(sentenceSelectionRange([], [])).toBeNull();
 });

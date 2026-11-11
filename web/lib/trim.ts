@@ -1,6 +1,14 @@
 import type { UiWord } from "../../src/types.ts";
+import type { UiSentence } from "../../src/types.ts";
 
 export type TimeRange = { startMs: number; endMs: number };
+
+export function sentenceSelectionRange(sentences: UiSentence[], selectedIds: number[]): TimeRange | null {
+  if (!selectedIds.length) return null;
+  const selected = sentences.filter((sentence) => selectedIds.includes(sentence.id));
+  if (!selected.length) return null;
+  return { startMs: Math.min(...selected.map((sentence) => sentence.start)), endMs: Math.max(...selected.map((sentence) => sentence.end)) };
+}
 
 export function clampRange(range: TimeRange, durationMs: number): TimeRange {
   const duration = Math.max(0, Number.isFinite(durationMs) ? durationMs : 0);

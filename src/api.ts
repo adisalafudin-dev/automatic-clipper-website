@@ -235,9 +235,11 @@ export function createJobApi(
         const existingIds = candidates.map((candidate) => candidate.id!);
         const maxId = existingIds.reduce((max, id) => Math.max(max, Number(id.match(/^clip-(\d+)$/)?.[1] ?? 0)), 0);
         const id = `clip-${String(maxId + 1).padStart(2, "0")}`;
+        const selectedSentences = sentences.filter((sentence) => sentence.id >= startSentence.id && sentence.id <= endSentence.id);
+        const hook = selectedSentences.map((sentence) => sentence.text).join(" ").slice(0, 240);
         const candidate: ClipCandidate = {
           id, startSentenceId: startSentence.id, endSentenceId: endSentence.id,
-          start, end, hook: "", title: "New clip", score: 0, reason: "Created from transcript selection",
+          start, end, hook, title: `Selection ${maxId + 1}`, score: 0, reason: "Created from transcript selection",
         };
         await writeFile(path.join(jobRoot, jobId, "candidates.json"), JSON.stringify([...candidates, candidate], null, 2));
         const manifestClip = {
