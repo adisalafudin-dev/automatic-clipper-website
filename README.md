@@ -9,7 +9,7 @@ The Phase 7 pipeline and UI are complete. Docker runs the API, UI, worker, FFmpe
 - Windows and [Bun](https://bun.sh/).
 - `ffmpeg` and `ffprobe` available on `PATH`.
 - For Windows runs, the whisper.cpp executable at `tools/whisper/Release/whisper-cli.exe` and a model at `tools/whisper/models/ggml-base.bin`.
-- A running 9Router instance and its API key. The default address is `http://192.168.1.19:5678/v1`.
+- A running 9Router instance and its API key. The default address is `http://192.168.1.13:20128/v1`.
 
 Whisper runs locally on the CPU. Transcription can take several minutes for a long video; the progress display reports pipeline stages, so it can remain on “Transcription” while Whisper is working. 9Router receives transcript text for clip selection, not video frames. Use only videos you own or have permission to process.
 
@@ -78,7 +78,7 @@ Copy-Item .env.example .env
 docker compose up --build
 ```
 
-Open <http://127.0.0.1:3000>. On first start, Compose downloads the default `base` Whisper model (about 142 MiB) into `models/`; uploaded videos and generated files in `data/` and models persist on the host. Docker keeps the SQLite job database in its own persistent volume so Linux SQLite can use reliable file locking on Windows. Set `WHISPER_MODEL=small` to use a locally downloaded small model. The default container LLM URL is `http://192.168.1.19:5678/v1`; override `LLM_BASE_URL` in `.env` for another reachable 9Router address. `docker compose down` stops the app and keeps all data volumes.
+Open <http://127.0.0.1:3000>. On first start, Compose downloads the default `base` Whisper model (about 142 MiB) into `models/`; uploaded videos and generated files in `data/` and models persist on the host. Docker keeps the SQLite job database in its own persistent volume so Linux SQLite can use reliable file locking on Windows. Set `WHISPER_MODEL=small` to use a locally downloaded small model. The default container LLM URL is `http://192.168.1.13:20128/v1`; override `LLM_BASE_URL` in `.env` for another reachable 9Router address. `docker compose down` stops the app and keeps all data volumes.
 
 ## For contributors and coding agents
 
