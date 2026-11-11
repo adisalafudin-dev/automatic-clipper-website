@@ -11,13 +11,14 @@ Phase: 6 | Branch: phase-6-ui-spec
 - UI-spec 6.3: three-column editor, clip list, source video playback bounded to the selected clip, loop toggle, and transcript preview overlay.
 - UI-spec 6.4: millisecond trim controls, two-handle source window, word snapping, reset, playhead/nudge/jump controls, keyboard shortcuts, debounced save, and duration warnings.
 - UI-spec 6.5: transcript words seek the source, highlight with playback, and support text-only edits or removal; overrides persist by transcript word index across trim changes.
+- UI-spec 6.6: per-clip and render-all-stale queue actions, queued/rendering/done/failed badges, errors, inline result player, and download link.
 - Pause trim: gaps over 600 ms between words are cut to a 120 ms breath on each side. Leading and trailing silence uses the same pad.
 - Captions are retimed onto the concatenated timeline. Manifest `duration` is the rendered length; `start` and `end` stay the source window.
 - `bun run check` covers the span math, FFmpeg concat args, and a real trimmed fixture.
 
 ## Next
 
-- UI-spec 6.6: per-clip render, render-all-stale, status badges, completed preview, and download.
+- UI-spec 6.7: create a clip from a selected transcript sentence range, delete clips, and finish empty/error states and keyboard help.
 
 ## Known bugs / open questions
 

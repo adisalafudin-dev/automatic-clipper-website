@@ -53,6 +53,9 @@ export type UiClipEdit = {
   style?: "classic" | "bold" | "clean";
   titleOverlay?: boolean;
   layout?: "crop" | "blurred" | "stacked";
+  renderStatus?: "none" | "queued" | "rendering" | "done" | "failed";
+  renderError?: string;
+  renderedAt?: string;
 };
 
 export type UiWord = { text: string; start: number; end: number; wordIndex?: number };

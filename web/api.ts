@@ -40,3 +40,21 @@ export async function saveClipEdit(jobId: string, clipId: string, payload: Recor
     method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(payload),
   });
 }
+
+export async function renderClip(jobId: string, clipId: string): Promise<void> {
+  await request(`/jobs/${encodeURIComponent(jobId)}/clips/${encodeURIComponent(clipId)}/render`, { method: "POST" });
+}
+
+export async function renderStale(jobId: string): Promise<void> {
+  await request(`/jobs/${encodeURIComponent(jobId)}/render`, { method: "POST" });
+}
+
+export async function removeClip(jobId: string, clipId: string): Promise<void> {
+  await request(`/jobs/${encodeURIComponent(jobId)}/clips/${encodeURIComponent(clipId)}`, { method: "DELETE" });
+}
+
+export async function createClip(jobId: string, startMs: number, endMs: number): Promise<void> {
+  await request(`/jobs/${encodeURIComponent(jobId)}/clips`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ startMs, endMs }),
+  });
+}

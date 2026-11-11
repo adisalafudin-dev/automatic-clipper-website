@@ -7,7 +7,8 @@ import { keepSpans, outputOffsetMs, spanDuration, wordsOnOutputTimeline, type So
 import { sampleFaceCenters, type FaceCenterSample } from "../vision/faces.ts";
 
 export type LayoutPreset = "crop" | "blurred" | "stacked";
-export type ClipRenderEdit = { startMs?: number; endMs?: number; caption?: string; captionWords?: Array<{ wordIndex: number; text: string }>; style?: CaptionStyle; titleOverlay?: boolean; layout?: LayoutPreset; origStartMs?: number; origEndMs?: number };
+export type RenderStatus = "none" | "queued" | "rendering" | "done" | "failed";
+export type ClipRenderEdit = { startMs?: number; endMs?: number; caption?: string; captionWords?: Array<{ wordIndex: number; text: string }>; style?: CaptionStyle; titleOverlay?: boolean; layout?: LayoutPreset; origStartMs?: number; origEndMs?: number; renderStatus?: RenderStatus; renderError?: string; renderedAt?: string };
 
 export type RenderedClip = {
   id: string;

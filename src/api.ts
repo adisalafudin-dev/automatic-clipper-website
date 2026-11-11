@@ -209,7 +209,7 @@ export function createJobApi(
       if (clipsCollection && request.method === "POST") {
         const jobId = decodeURIComponent(clipsCollection[1]!);
         const job = store.get(jobId);
-        if (!job?.result || job.status !== "completed") return json({ error: "Completed job not found" }, 404);
+        if (!job?.result) return json({ error: "Completed job not found" }, 404);
         let payload: unknown;
         try { payload = await request.json(); } catch { return json({ error: "Request body must be valid JSON" }, 400); }
         if (!isRecord(payload) || typeof payload.startMs !== "number" || typeof payload.endMs !== "number") {
@@ -227,8 +227,12 @@ export function createJobApi(
         const start = startSentence.start;
         const end = endSentence.end;
         if (end - start < 30_000 || end - start > 90_000) return json({ error: "Clip must be between 30 and 90 seconds" }, 400);
-        const candidates = JSON.parse(await readFile(path.join(jobRoot, jobId, "candidates.json"), "utf8")) as ClipCandidate[];
-        const existingIds = candidates.map((candidate, index) => candidate.id ?? `clip-${String(index + 1).padStart(2, "0")}`);
+        const storedCandidates = JSON.parse(await readFile(path.join(jobRoot, jobId, "candidates.json"), "utf8")) as ClipCandidate[];
+        const candidates = storedCandidates.map((candidate, index) => ({
+          ...candidate,
+          id: candidate.id ?? job.result!.clips[index]?.id ?? `clip-${String(index + 1).padStart(2, "0")}`,
+        }));
+        const existingIds = candidates.map((candidate) => candidate.id!);
         const maxId = existingIds.reduce((max, id) => Math.max(max, Number(id.match(/^clip-(\d+)$/)?.[1] ?? 0)), 0);
         const id = `clip-${String(maxId + 1).padStart(2, "0")}`;
         const candidate: ClipCandidate = {
@@ -243,6 +247,11 @@ export function createJobApi(
         };
         const manifest = { ...job.result, clips: [...job.result.clips, manifestClip] };
         store.updateResult(jobId, manifest);
+        let edits: Record<string, ClipRenderEdit> = {};
+        try { edits = JSON.parse(await readFile(path.join(jobRoot, jobId, "edits.json"), "utf8")) as Record<string, ClipRenderEdit>; }
+        catch (error) { if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error; }
+        edits[id] = { startMs: start, endMs: end, origStartMs: start, origEndMs: end, renderStatus: "none" };
+        await writeFile(path.join(jobRoot, jobId, "edits.json"), JSON.stringify(edits, null, 2));
         return json({ clip: manifestClip }, 201);
       }
 
@@ -261,12 +270,16 @@ export function createJobApi(
       if (deleteClipMatch && request.method === "DELETE") {
         const jobId = decodeURIComponent(deleteClipMatch[1]!);
         const job = store.get(jobId);
-        if (!job?.result || job.status !== "completed") return json({ error: "Completed job not found" }, 404);
+        if (!job?.result) return json({ error: "Completed job not found" }, 404);
         const clipId = deleteClipMatch[2]!;
         if (!job.result.clips.some((clip) => clip.id === clipId)) return json({ error: "Clip not found" }, 404);
         const jobDir = path.join(jobRoot, jobId);
-        const candidates = JSON.parse(await readFile(path.join(jobDir, "candidates.json"), "utf8")) as ClipCandidate[];
-        const retained = candidates.filter((candidate, index) => (candidate.id ?? `clip-${String(index + 1).padStart(2, "0")}`) !== clipId);
+        const storedCandidates = JSON.parse(await readFile(path.join(jobDir, "candidates.json"), "utf8")) as ClipCandidate[];
+        const candidates = storedCandidates.map((candidate, index) => ({
+          ...candidate,
+          id: candidate.id ?? job.result!.clips[index]?.id ?? `clip-${String(index + 1).padStart(2, "0")}`,
+        }));
+        const retained = candidates.filter((candidate) => candidate.id !== clipId);
         await writeFile(path.join(jobDir, "candidates.json"), JSON.stringify(retained, null, 2));
         let edits: Record<string, ClipRenderEdit> = {};
         try { edits = JSON.parse(await readFile(path.join(jobDir, "edits.json"), "utf8")) as Record<string, ClipRenderEdit>; }
@@ -285,10 +298,17 @@ export function createJobApi(
       if (renderClipMatch && request.method === "POST") {
         const jobId = decodeURIComponent(renderClipMatch[1]!);
         const job = store.get(jobId);
-        if (!job?.result || job.status !== "completed") return json({ error: "Completed job not found" }, 404);
+        if (!job?.result) return json({ error: "Completed job not found" }, 404);
         if (!job.result.clips.some((clip) => clip.id === renderClipMatch[2])) return json({ error: "Clip not found" }, 404);
+        const jobDir = path.join(jobRoot, jobId);
+        let edits: Record<string, ClipRenderEdit> = {};
+        try { edits = JSON.parse(await readFile(path.join(jobDir, "edits.json"), "utf8")) as Record<string, ClipRenderEdit>; }
+        catch (error) { if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error; }
+        const clipId = renderClipMatch[2]!;
+        edits[clipId] = { ...edits[clipId], renderStatus: "queued", renderError: undefined };
+        await writeFile(path.join(jobDir, "edits.json"), JSON.stringify(edits, null, 2));
         store.requeue(jobId);
-        queue.enqueue({ id: jobId, videoPath: job.videoPath, force: true, operation: "render", faceTracking: job.faceTracking, clipId: renderClipMatch[2] });
+        queue.enqueue({ id: jobId, videoPath: job.videoPath, force: true, operation: "render", faceTracking: job.faceTracking, clipId });
         return json({ job: store.get(jobId) }, 202);
       }
 
@@ -296,7 +316,7 @@ export function createJobApi(
       if (editMatch && request.method === "PATCH") {
         const jobId = decodeURIComponent(editMatch[1]!);
         const job = store.get(jobId);
-        if (!job?.result || job.status !== "completed") return json({ error: "Completed job not found" }, 404);
+        if (!job?.result) return json({ error: "Completed job not found" }, 404);
         let payload: unknown;
         try {
           payload = await request.json();
@@ -341,10 +361,15 @@ export function createJobApi(
             seen.add(wordIndex);
           }
         }
-        const candidates = JSON.parse(await readFile(path.join(jobDir, "candidates.json"), "utf8")) as ClipCandidate[];
-        const candidate = candidates[clipIndex];
+        const storedCandidates = JSON.parse(await readFile(path.join(jobDir, "candidates.json"), "utf8")) as ClipCandidate[];
+        const candidates = storedCandidates.map((candidate, index) => ({
+          ...candidate,
+          id: candidate.id ?? job.result!.clips[index]?.id ?? `clip-${String(index + 1).padStart(2, "0")}`,
+        }));
+        const candidateIndex = candidates.findIndex((candidate) => candidate.id === oldClip.id);
+        const candidate = candidates[candidateIndex];
         if (!candidate) return json({ error: "Candidate data is missing for this clip" }, 409);
-        candidates[clipIndex] = { ...candidate, start, end };
+        candidates[candidateIndex] = { ...candidate, start, end };
         await writeFile(path.join(jobDir, "candidates.json"), JSON.stringify(candidates, null, 2));
         let edits: Record<string, ClipRenderEdit> = {};
         try {
@@ -363,6 +388,8 @@ export function createJobApi(
           layout: (payload.layout as ClipRenderEdit["layout"] | undefined) ?? previous.layout ?? "crop",
           origStartMs: previous.origStartMs ?? oldClip.start,
           origEndMs: previous.origEndMs ?? oldClip.end,
+          renderStatus: "none",
+          renderError: undefined,
         };
         await writeFile(path.join(jobDir, "edits.json"), JSON.stringify(edits, null, 2));
         return json({ ok: true, edits });
@@ -372,9 +399,17 @@ export function createJobApi(
       if (renderMatch && request.method === "POST") {
         const jobId = decodeURIComponent(renderMatch[1]!);
         const job = store.get(jobId);
-        if (!job?.result || job.status !== "completed") return json({ error: "Completed job not found" }, 404);
+        if (!job?.result) return json({ error: "Completed job not found" }, 404);
+        const jobDir = path.join(jobRoot, jobId);
+        let edits: Record<string, ClipRenderEdit> = {};
+        try { edits = JSON.parse(await readFile(path.join(jobDir, "edits.json"), "utf8")) as Record<string, ClipRenderEdit>; }
+        catch (error) { if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error; }
+        for (const edit of Object.values(edits)) {
+          if (edit.renderStatus === "none" || edit.renderStatus === "failed") edit.renderStatus = "queued";
+        }
+        await writeFile(path.join(jobDir, "edits.json"), JSON.stringify(edits, null, 2));
         store.requeue(jobId);
-        queue.enqueue({ id: jobId, videoPath: job.videoPath, force: true, operation: "render", faceTracking: job.faceTracking });
+        queue.enqueue({ id: jobId, videoPath: job.videoPath, force: true, operation: "render", faceTracking: job.faceTracking, onlyStale: true });
         return json({ job: store.get(jobId) }, 202);
       }
 

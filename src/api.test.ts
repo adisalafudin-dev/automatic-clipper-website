@@ -155,6 +155,10 @@ test("UI endpoints serve byte ranges, transcript sentences, and create, render, 
     expect(render.status).toBe(202);
     await waitForStatus(baseUrl, jobId, "completed");
     expect(store.get(jobId)!.result!.clips.map((clip) => clip.id)).toEqual(["clip-01", "clip-02"]);
+    const renderState = await fetch(`${baseUrl}/jobs/${jobId}`);
+    const renderBody = await renderState.json() as { edits: Record<string, { renderStatus: string; renderedAt?: string }> };
+    expect(renderBody.edits["clip-02"]!.renderStatus).toBe("done");
+    expect(typeof renderBody.edits["clip-02"]!.renderedAt).toBe("string");
 
     const deleted = await fetch(`${baseUrl}/jobs/${jobId}/clips/clip-01`, { method: "DELETE" });
     expect(deleted.status).toBe(200);
@@ -255,6 +259,7 @@ test("browser upload supports preview, trim and caption edits, and queued rerend
   let renderCount = 0;
   let faceTrackingRequested = false;
   let rerenderFaceTracking = false;
+  let rerenderOnlyStale = false;
   const queue = new JobQueue(store, async (videoPath, jobDir, _force, _report, options) => {
     faceTrackingRequested = options.faceTracking === true;
     await mkdir(path.join(jobDir, "clips"), { recursive: true });
@@ -267,9 +272,10 @@ test("browser upload supports preview, trim and caption edits, and queued rerend
     }]));
     await Bun.write(path.join(jobDir, clip.file), "fixture clip");
     return { ...result, manifest: { ...result.manifest, source: videoPath } };
-  }, async (videoPath, _jobDir, report, faceTracking) => {
+  }, async (videoPath, _jobDir, report, faceTracking, _clipId, onlyStale) => {
     renderCount++;
     rerenderFaceTracking = faceTracking;
+    rerenderOnlyStale = onlyStale === true;
     report("rendering", 0);
     await Bun.sleep(10);
     report("rendering", 100);
@@ -337,6 +343,7 @@ test("browser upload supports preview, trim and caption edits, and queued rerend
     await waitForStatus(baseUrl, created.id, "completed");
     expect(renderCount).toBe(1);
     expect(rerenderFaceTracking).toBe(true);
+    expect(rerenderOnlyStale).toBe(true);
     const updated = store.get(created.id)!;
     expect(updated.result?.clips).toHaveLength(1);
   } finally {

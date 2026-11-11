@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { JobView, UiClipEdit, UiSentence } from "../src/types.ts";
-import { getTranscript, saveClipEdit } from "./api.ts";
+import { getTranscript, renderClip, renderStale, saveClipEdit } from "./api.ts";
 import { clampRange, durationWarning, formatTime, parseTime, snapRangeToWords, type TimeRange } from "./lib/trim.ts";
 
 type JobDetail = { job: JobView; edits: Record<string, UiClipEdit> };
@@ -110,6 +110,7 @@ export function JobEditor({ detail, onEditSaved }: Props) {
   const currentSentence = useMemo(() => sentences.find((sentence) => playhead >= sentence.start && playhead <= sentence.end), [sentences, playhead]);
   const videoUrl = `/jobs/${encodeURIComponent(job.id)}/source`;
   const warning = durationWarning(range);
+  const renderStatus = selected ? detail.edits[selected.id]?.renderStatus ?? "done" : "none";
   const windowStart = Math.max(0, range.startMs - 30_000);
   const windowEnd = Math.min(sourceDuration, range.endMs + 30_000);
   const windowSpan = Math.max(1, windowEnd - windowStart);
@@ -127,11 +128,14 @@ export function JobEditor({ detail, onEditSaved }: Props) {
   };
 
   return <section className="editor-shell" aria-label="Job editor">
-    <header className="editor-heading"><div><span className="eyebrow">JOB EDITOR</span><h2>{job.filename}</h2></div><span className={`badge ${job.status}`}>{job.status}</span></header>
+    <header className="editor-heading"><div><span className="eyebrow">JOB EDITOR</span><h2>{job.filename}</h2></div><div className="editor-actions"><button className="button" disabled={job.status === "running" || job.status === "queued"} onClick={() => void renderStale(job.id).then(onEditSaved).catch((reason: unknown) => setLoadError(reason instanceof Error ? reason.message : String(reason)))}>Render all stale</button><span className={`badge ${job.status}`}>{job.status}</span></div></header>
     {loadError && <p className="error" role="alert">{loadError}</p>}
     {job.status !== "completed" && <div className="editor-progress"><span>{job.error ? `Failed: ${job.error}` : `${job.stage} · ${job.progress}%`}</span><div className="progress-track"><div className="progress-fill" style={{ width: `${job.progress}%` }} /></div></div>}
     <div className="editor-grid">
-      <aside className="editor-column clip-column"><h3>Clips <span>{clips.length}</span></h3>{clips.length ? clips.map((clip) => <button className={`clip-choice ${selected?.id === clip.id ? "active" : ""}`} key={clip.id} onClick={() => setSelectedId(clip.id)}><strong>{clip.title}</strong><span>{clock(clip.duration)} · score {clip.score}/10</span></button>) : <p className="muted">No clips yet.</p>}</aside>
+      <aside className="editor-column clip-column"><h3>Clips <span>{clips.length}</span></h3>{clips.length ? clips.map((clip) => {
+        const status = detail.edits[clip.id]?.renderStatus ?? "done";
+        return <button className={`clip-choice ${selected?.id === clip.id ? "active" : ""}`} key={clip.id} onClick={() => setSelectedId(clip.id)}><strong>{clip.title}</strong><span>{clock(clip.duration)} · score {clip.score}/10</span><span className={`badge ${status}`}>{status}</span></button>;
+      }) : <p className="muted">No clips yet.</p>}</aside>
       <section className="editor-column preview-column" aria-label="Source preview">
         {selected ? <>
           <div className="preview-frame"><video ref={videoRef} src={videoUrl} controls preload="metadata" onTimeUpdate={(event) => {
@@ -152,6 +156,9 @@ export function JobEditor({ detail, onEditSaved }: Props) {
           <div className="range-wrap"><input aria-label="Clip start range" type="range" min="0" max={windowSpan} step="100" value={Math.min(windowSpan, Math.max(0, range.startMs - windowStart))} onChange={(event) => updateRange({ ...range, startMs: windowStart + Number(event.currentTarget.value) })} /><input aria-label="Clip end range" type="range" min="0" max={windowSpan} step="100" value={Math.min(windowSpan, Math.max(0, range.endMs - windowStart))} onChange={(event) => updateRange({ ...range, endMs: windowStart + Number(event.currentTarget.value) })} /></div>
           <div className="trim-actions"><button onClick={() => updateRange({ ...range, startMs: playhead })}>Start = playhead</button><button onClick={() => updateRange({ ...range, endMs: playhead })}>End = playhead</button><button onClick={() => updateRange({ ...range, startMs: range.startMs - 100 })}>Start −100 ms</button><button onClick={() => updateRange({ ...range, startMs: range.startMs + 100 })}>Start +100 ms</button><button onClick={() => updateRange({ ...range, endMs: range.endMs - 100 })}>End −100 ms</button><button onClick={() => updateRange({ ...range, endMs: range.endMs + 100 })}>End +100 ms</button><button onClick={() => { if (videoRef.current) videoRef.current.currentTime = range.startMs / 1000; }}>Jump to start</button><button onClick={() => { if (videoRef.current) videoRef.current.currentTime = range.endMs / 1000; }}>Jump to end</button><button onClick={() => updateRange({ startMs: detail.edits[selected.id]?.origStartMs ?? selected.start, endMs: detail.edits[selected.id]?.origEndMs ?? selected.end })}>Reset</button><label><input type="checkbox" checked={snap} onChange={(event) => setSnap(event.currentTarget.checked)} /> Snap to words</label></div>
           <p className="trim-status">Duration {formatTime(range.endMs - range.startMs)} · {saveState}{warning && <span className="warning"> · Outside 30–90 sec</span>}</p>
+          <div className="render-controls"><button className="button primary" disabled={job.status === "running" || job.status === "queued" || renderStatus === "queued" || renderStatus === "rendering"} onClick={() => void renderClip(job.id, selected.id).then(onEditSaved).catch((reason: unknown) => setLoadError(reason instanceof Error ? reason.message : String(reason)))}>{renderStatus === "queued" || renderStatus === "rendering" ? "Rendering…" : renderStatus === "done" ? "Render again" : "Render clip"}</button><span className={`badge ${renderStatus}`}>{renderStatus}</span></div>
+          {detail.edits[selected.id]?.renderError && <p className="error" role="alert">{detail.edits[selected.id]!.renderError}</p>}
+          {renderStatus === "done" && <div className="rendered-result"><h4>Rendered clip</h4><video controls preload="metadata" src={`/jobs/${encodeURIComponent(job.id)}/clips/${encodeURIComponent(selected.id)}/file`} /><a href={`/jobs/${encodeURIComponent(job.id)}/clips/${encodeURIComponent(selected.id)}/file`} download={`${selected.id}.mp4`}>Download clip</a></div>}
         </> : <p className="muted">Select a clip to preview.</p>}
       </section>
       <aside className="editor-column transcript-column"><h3>Transcript & captions</h3>{sentences.length ? <div className="transcript-list">{sentences.map((sentence) => {
