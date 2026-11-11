@@ -1,31 +1,26 @@
 # Progress
 
-Phase: 7 | Branch: phase-7-polish | Gate: passed
+Phase: 7 | Branch: phase-7-rubric
 
 ## Done
 
-- Added Classic, Bold, and Clean caption presets and optional hook-title overlays.
-- Captions are center-aligned in the 9:16 safe area to avoid account and channel UI near the bottom.
-- Added opt-in YuNet face tracking through CPU ONNX Runtime; center crop stays default.
-- Sparse five-second samples, smoothed crop path, center fallback, and configurable model path.
-- Added CLI/UI/API opt-in, SQLite migration, model checksum download, and fallback tests.
-- Real smoke: detected face centers locally and rendered one 30.53 s 9:16 tracked clip from cached pipeline artifacts.
-- `bun run check`: typecheck passed; 28 tests passed, including dynamic-crop, edited-caption, 129 MiB streaming, and multipart-compatibility coverage.
-- Production smoke: UI and `/health` returned 200; existing SQLite schema migration passed.
-- Rerendered the latest four-clip job with centered captions; ffprobe confirms 1080x1920.
+- Caption presets, centered safe-area captions, hook-title overlays, and opt-in YuNet face tracking.
+- Pause trim: gaps over 600 ms between words are cut to a 120 ms breath on each side. Leading and trailing silence uses the same pad.
+- Captions are retimed onto the concatenated timeline. Manifest `duration` is the rendered length; `start` and `end` stay the source window.
+- `bun run check` covers the span math, FFmpeg concat args, and a real trimmed fixture.
 
 ## Next
 
-- Await user go before Phase 8.
+- Layout presets (blurred background, stacked).
 
 ## Known bugs / open questions
 
 - `assets/raw/sample.mp4` is a song and yielded no candidates.
 - Face tracking quality depends on face size and visibility in the five-second samples.
+- Cached clips keep the old cut until a rerender with `--force` or the UI render button.
 
 ## Run
 
 - `bun run check`
-- `bun run download-face-model` (opt-in face tracking only)
 - `bun run start`
-- `bun run src/cli.ts video.mp4 --face-track`
+- `bun run src/cli.ts video.mp4 --force`

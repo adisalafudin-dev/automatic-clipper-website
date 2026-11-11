@@ -53,7 +53,7 @@ function renderProject(job, edits = {}) {
     content += `<div class="rerender-bar"><span>Trim and caption changes apply on rerender.</span><button class="button button-primary" id="rerender-button" type="button">Render changes ↗</button></div><div class="clips-grid">`;
     content += job.result.clips.map((clip) => `<article class="clip-card">
       <video controls preload="metadata" src="/jobs/${encodeURIComponent(job.id)}/clips/${encodeURIComponent(clip.id)}?v=${encodeURIComponent(job.updatedAt)}"></video>
-      <div class="clip-body"><div class="clip-heading">${esc(clip.title)}</div><div class="clip-hook">${esc(clip.hook)}</div><div class="clip-facts"><span>${formatTime(clip.end - clip.start)}</span><span>·</span><span>score ${clip.score}/10</span></div>
+      <div class="clip-body"><div class="clip-heading">${esc(clip.title)}</div><div class="clip-hook">${esc(clip.hook)}</div><div class="clip-facts"><span>${formatTime(clip.duration ?? clip.end - clip.start)}</span><span>·</span><span>score ${clip.score}/10</span></div>
       <form class="clip-edit" data-clip="${esc(clip.id)}"><div class="edit-fields">
         <label>Start (sec)<input name="start" type="number" min="0" step="0.1" value="${(clip.start / 1000).toFixed(1)}" required></label>
         <label>End (sec)<input name="end" type="number" min="0" step="0.1" value="${(clip.end / 1000).toFixed(1)}" required></label></div>

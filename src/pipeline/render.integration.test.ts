@@ -25,7 +25,7 @@ test("renders a tiny FFmpeg fixture as captioned 9:16 normalized video with edit
       "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
       "-f", "lavfi", "-i", "testsrc=size=320x180:rate=24",
       "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=16000",
-      "-t", "2", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+      "-t", "3", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
       "-c:a", "pcm_s16le", "-ac", "1", source,
     ]);
     const transcript: Transcript = {
@@ -33,7 +33,7 @@ test("renders a tiny FFmpeg fixture as captioned 9:16 normalized video with edit
       language: "en",
       words: [
         { text: "Test", start: 100, end: 450 },
-        { text: "caption.", start: 500, end: 1000 },
+        { text: "caption.", start: 500, end: 1900 },
       ],
     };
     const manifest = await renderClips(source, jobDir, transcript, [{
@@ -82,6 +82,38 @@ test("renders a tiny FFmpeg fixture as captioned 9:16 normalized video with edit
     const trackedStreams = (JSON.parse(trackedProbe) as { streams: Array<{ width: number; height: number }> }).streams;
     expect(trackedStreams[0]!.width).toBe(1080);
     expect(trackedStreams[0]!.height).toBe(1920);
+
+    const pausedDir = path.join(temp, "paused");
+    const paused = await renderClips(source, pausedDir, {
+      model: "test",
+      language: "en",
+      words: [
+        { text: "Wait", start: 0, end: 300 },
+        { text: "now.", start: 1600, end: 1900 },
+      ],
+    }, [{
+      startSentenceId: 0,
+      endSentenceId: 0,
+      start: 0,
+      end: 2500,
+      hook: "Pause hook",
+      title: "Pause",
+      score: 8,
+      reason: "Pause fixture",
+    }], true);
+    expect(paused.clips[0]!.duration).toBe(960);
+    expect(paused.clips[0]!.start).toBe(0);
+    expect(paused.clips[0]!.end).toBe(2500);
+    const pausedAss = await Bun.file(path.join(pausedDir, "captions", "clip-01.ass")).text();
+    expect(pausedAss).toContain("Dialogue: 0,0:00:00.00,0:00:00.84");
+    expect(pausedAss).toContain("{\\k54}Wait {\\k30}now.");
+    const pausedProbe = await run([
+      "ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "json",
+      path.join(pausedDir, "clips", "clip-01.mp4"),
+    ]);
+    const pausedDuration = Number((JSON.parse(pausedProbe) as { format: { duration: string } }).format.duration);
+    expect(pausedDuration).toBeGreaterThan(0.75);
+    expect(pausedDuration).toBeLessThan(1.25);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }

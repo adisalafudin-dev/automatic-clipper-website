@@ -51,6 +51,20 @@ test("FFmpeg arguments crop, scale, subtitle, normalize, and encode the clip", (
   ]);
 });
 
+test("pause cuts concatenate with trim filters inside the original decode window", () => {
+  const args = buildRenderArgs("video.mp4", "clips/clip.mp4", "captions/clip.ass", 10_000, 13_000, [], [
+    { start: 10_000, end: 10_520 },
+    { start: 11_680, end: 12_320 },
+  ]);
+  const graph = args[args.indexOf("-filter_complex") + 1];
+  expect(graph).toContain("trim=start=0.000:end=0.520");
+  expect(graph).toContain("trim=start=1.680:end=2.320");
+  expect(graph).toContain("concat=n=2:v=1:a=1");
+  expect(args).toContain("-map");
+  expect(args[args.indexOf("-ss") + 1]).toBe("10.000");
+  expect(args[args.indexOf("-t") + 1]).toBe("3.000");
+});
+
 test("face crop arguments interpolate the smoothed crop path and clamp it to the frame", () => {
   const args = buildRenderArgs("video.mp4", "clips/clip.mp4", "captions/clip.ass", 0, 30_000, [
     { time: 2.5, centerX: 340 },

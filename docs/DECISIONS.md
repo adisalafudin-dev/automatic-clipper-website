@@ -33,3 +33,4 @@ Format: `date | decision | reason`
 2026-11-09 | Phase 7 renders classic/bold/clean caption presets and hook-title overlays in ASS | Keeps caption and title appearance editable without adding another render dependency
 
 2026-11-09 | Caption presets use vertical and horizontal center alignment | Keeps subtitles in the center safe area, away from short-video account labels and controls near the bottom
+2026-11-10 | Pause trim drops inter-word gaps over 600 ms, leaving 120 ms of breath on each side, and trims leading and trailing silence to that pad | Word timestamps are already cached, so dead air can be cut without a second silence detector. Source start and end stay on the clip so manual trims still edit the original range.
