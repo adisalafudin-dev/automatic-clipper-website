@@ -55,5 +55,5 @@ export type UiClipEdit = {
   layout?: "crop" | "blurred" | "stacked";
 };
 
-export type UiWord = { text: string; start: number; end: number };
+export type UiWord = { text: string; start: number; end: number; wordIndex?: number };
 export type UiSentence = { id: number; text: string; start: number; end: number; words: UiWord[] };

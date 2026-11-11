@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { captionEvents, buildAss } from "./captions.ts";
+import { applyCaptionWordEdits, captionEvents, buildAss } from "./captions.ts";
 import { buildRenderArgs } from "./render.ts";
 import type { Word } from "../types.ts";
 
@@ -37,6 +37,15 @@ test("ASS subtitles have per-word karaoke highlighting and clip-relative timesta
   expect(ass).toContain("Style: Default,Arial,66,&H00FFFFFF,&H0000FFFF,&H00101010,&H80000000,-1,0,1,4,1,5,70,70,0,1");
   expect(ass).toContain("Dialogue: 0,0:00:00.00,0:00:00.75");
   expect(ass).toContain("{\\k25}A {\\k50}\\{safe\\}");
+});
+
+test("caption word edits change text, preserve timestamps, and allow deleting words", () => {
+  expect(applyCaptionWordEdits(words, [
+    { wordIndex: 0, text: "That" }, { wordIndex: 1, text: "" },
+  ])).toEqual([
+    { text: "That", start: 100, end: 230 },
+    ...words.slice(2),
+  ]);
 });
 
 test("FFmpeg arguments crop, scale, subtitle, normalize, and encode the clip", () => {

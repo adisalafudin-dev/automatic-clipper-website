@@ -189,7 +189,9 @@ export function createJobApi(
         const transcript = JSON.parse(await readFile(path.join(jobRoot, job.id, "transcript.json"), "utf8")) as Transcript;
         const sentences = transcriptSentences(transcript).map((sentence) => ({
           ...sentence,
-          words: transcript.words.filter((word) => word.start < sentence.end && word.end > sentence.start),
+          words: transcript.words.flatMap((word, wordIndex) => word.start < sentence.end && word.end > sentence.start
+            ? [{ ...word, wordIndex }]
+            : []),
         }));
         return json({ sentences });
       }
@@ -325,6 +327,20 @@ export function createJobApi(
         const jobDir = path.join(jobRoot, jobId);
         const transcript = JSON.parse(await readFile(path.join(jobDir, "transcript.json"), "utf8")) as Transcript;
         if (end > (transcript.words.at(-1)?.end ?? 0)) return json({ error: "Trim end exceeds the transcript duration" }, 400);
+        if (payload.captionWords !== undefined) {
+          if (!Array.isArray(payload.captionWords)) return json({ error: "captionWords must be an array" }, 400);
+          const seen = new Set<number>();
+          for (const item of payload.captionWords) {
+            if (!isRecord(item) || !Number.isInteger(item.wordIndex) || typeof item.text !== "string") {
+              return json({ error: "Each caption word needs an integer wordIndex and text" }, 400);
+            }
+            const wordIndex = item.wordIndex as number;
+            if (wordIndex < 0 || wordIndex >= transcript.words.length || seen.has(wordIndex) || item.text.length > 500) {
+              return json({ error: "captionWords contains an invalid index, duplicate, or oversized edit" }, 400);
+            }
+            seen.add(wordIndex);
+          }
+        }
         const candidates = JSON.parse(await readFile(path.join(jobDir, "candidates.json"), "utf8")) as ClipCandidate[];
         const candidate = candidates[clipIndex];
         if (!candidate) return json({ error: "Candidate data is missing for this clip" }, 409);
@@ -341,6 +357,7 @@ export function createJobApi(
           startMs: start,
           endMs: end,
           caption: payload.caption.trim(),
+          captionWords: (payload.captionWords as ClipRenderEdit["captionWords"] | undefined) ?? previous.captionWords ?? [],
           style: (payload.style as ClipRenderEdit["style"] | undefined) ?? previous.style ?? "classic",
           titleOverlay: (payload.titleOverlay as boolean | undefined) ?? previous.titleOverlay ?? false,
           layout: (payload.layout as ClipRenderEdit["layout"] | undefined) ?? previous.layout ?? "crop",

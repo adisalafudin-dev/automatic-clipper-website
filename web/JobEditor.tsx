@@ -21,7 +21,9 @@ export function JobEditor({ detail, onEditSaved }: Props) {
   const [saveState, setSaveState] = useState("Saved");
   const [startText, setStartText] = useState(formatTime(clips[0]?.start ?? 0));
   const [endText, setEndText] = useState(formatTime(clips[0]?.end ?? 0));
+  const [captionDraft, setCaptionDraft] = useState<Record<number, string>>({});
   const dirty = useRef(false);
+  const captionDirty = useRef(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const selected = clips.find((clip) => clip.id === selectedId) ?? clips[0];
 
@@ -41,24 +43,28 @@ export function JobEditor({ detail, onEditSaved }: Props) {
     setRange(savedRange);
     setStartText(formatTime(savedRange.startMs));
     setEndText(formatTime(savedRange.endMs));
+    setCaptionDraft(Object.fromEntries((savedEdit?.captionWords ?? []).map((edit) => [edit.wordIndex, edit.text])));
     dirty.current = false;
+    captionDirty.current = false;
     video.currentTime = savedRange.startMs / 1000;
     setPlayhead(savedRange.startMs);
   }, [job.id, selected?.id]);
 
   useEffect(() => {
-    if (!selected || !dirty.current) return;
+    if (!selected || (!dirty.current && !captionDirty.current)) return;
     setSaveState("Saving…");
     const timer = window.setTimeout(() => {
       void saveClipEdit(job.id, selected.id, {
         startMs: range.startMs,
         endMs: range.endMs,
-        caption: detail.edits[selected.id]?.caption ?? "",
+        caption: captionDirty.current ? "" : detail.edits[selected.id]?.caption ?? "",
+        captionWords: Object.entries(captionDraft).map(([wordIndex, text]) => ({ wordIndex: Number(wordIndex), text })),
         style: detail.edits[selected.id]?.style,
         titleOverlay: detail.edits[selected.id]?.titleOverlay,
         layout: detail.edits[selected.id]?.layout,
       }).then(() => {
         dirty.current = false;
+        captionDirty.current = false;
         setSaveState("Saved");
         onEditSaved();
       }).catch((reason: unknown) => {
@@ -66,7 +72,7 @@ export function JobEditor({ detail, onEditSaved }: Props) {
       });
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [detail.edits, job.id, onEditSaved, range, selected]);
+  }, [captionDraft, detail.edits, job.id, onEditSaved, range, selected]);
 
   const sourceDuration = sentences.at(-1)?.end ?? selected?.end ?? 0;
   const allWords = useMemo(() => sentences.flatMap((sentence) => sentence.words), [sentences]);
@@ -115,6 +121,10 @@ export function JobEditor({ detail, onEditSaved }: Props) {
     }
     updateRange({ ...range, [edge]: parsed });
   };
+  const updateCaptionWord = (wordIndex: number, text: string) => {
+    setCaptionDraft((current) => ({ ...current, [wordIndex]: text }));
+    captionDirty.current = true;
+  };
 
   return <section className="editor-shell" aria-label="Job editor">
     <header className="editor-heading"><div><span className="eyebrow">JOB EDITOR</span><h2>{job.filename}</h2></div><span className={`badge ${job.status}`}>{job.status}</span></header>
@@ -137,14 +147,21 @@ export function JobEditor({ detail, onEditSaved }: Props) {
             if (time < range.startMs || time >= range.endMs) event.currentTarget.currentTime = range.startMs / 1000;
           }} /></div>
           <div className="preview-tools"><label><input type="checkbox" checked={loop} onChange={(event) => setLoop(event.currentTarget.checked)} /> Loop preview</label><span>{clock(range.startMs)}–{clock(range.endMs)}</span></div>
-          <p className="preview-caption">{currentSentence?.text ?? selected.hook}</p><p className="preview-note">Preview only, final look is rendered.</p>
+          <p className="preview-caption">{currentSentence?.words.map((word) => captionDraft[word.wordIndex ?? -1] ?? word.text).filter(Boolean).join(" ") ?? selected.hook}</p><p className="preview-note">Preview only, final look is rendered.</p>
           <div className="trim-fields"><label>Start<input value={startText} onChange={(event) => setStartText(event.currentTarget.value)} onBlur={() => commitTimeText("startMs", startText)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label><label>End<input value={endText} onChange={(event) => setEndText(event.currentTarget.value)} onBlur={() => commitTimeText("endMs", endText)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label></div>
           <div className="range-wrap"><input aria-label="Clip start range" type="range" min="0" max={windowSpan} step="100" value={Math.min(windowSpan, Math.max(0, range.startMs - windowStart))} onChange={(event) => updateRange({ ...range, startMs: windowStart + Number(event.currentTarget.value) })} /><input aria-label="Clip end range" type="range" min="0" max={windowSpan} step="100" value={Math.min(windowSpan, Math.max(0, range.endMs - windowStart))} onChange={(event) => updateRange({ ...range, endMs: windowStart + Number(event.currentTarget.value) })} /></div>
           <div className="trim-actions"><button onClick={() => updateRange({ ...range, startMs: playhead })}>Start = playhead</button><button onClick={() => updateRange({ ...range, endMs: playhead })}>End = playhead</button><button onClick={() => updateRange({ ...range, startMs: range.startMs - 100 })}>Start −100 ms</button><button onClick={() => updateRange({ ...range, startMs: range.startMs + 100 })}>Start +100 ms</button><button onClick={() => updateRange({ ...range, endMs: range.endMs - 100 })}>End −100 ms</button><button onClick={() => updateRange({ ...range, endMs: range.endMs + 100 })}>End +100 ms</button><button onClick={() => { if (videoRef.current) videoRef.current.currentTime = range.startMs / 1000; }}>Jump to start</button><button onClick={() => { if (videoRef.current) videoRef.current.currentTime = range.endMs / 1000; }}>Jump to end</button><button onClick={() => updateRange({ startMs: detail.edits[selected.id]?.origStartMs ?? selected.start, endMs: detail.edits[selected.id]?.origEndMs ?? selected.end })}>Reset</button><label><input type="checkbox" checked={snap} onChange={(event) => setSnap(event.currentTarget.checked)} /> Snap to words</label></div>
           <p className="trim-status">Duration {formatTime(range.endMs - range.startMs)} · {saveState}{warning && <span className="warning"> · Outside 30–90 sec</span>}</p>
         </> : <p className="muted">Select a clip to preview.</p>}
       </section>
-      <aside className="editor-column transcript-column"><h3>Transcript</h3>{sentences.length ? <div className="transcript-list">{sentences.map((sentence) => <p className={currentSentence?.id === sentence.id ? "current" : ""} key={sentence.id}><span>{clock(sentence.start)}</span>{sentence.text}</p>)}</div> : <p className="muted">Transcript will appear when transcription completes.</p>}</aside>
+      <aside className="editor-column transcript-column"><h3>Transcript & captions</h3>{sentences.length ? <div className="transcript-list">{sentences.map((sentence) => {
+        const words = sentence.words.filter((word) => word.end > range.startMs && word.start < range.endMs);
+        if (!words.length) return null;
+        return <div className={`caption-line ${currentSentence?.id === sentence.id ? "current" : ""}`} key={sentence.id}><span className="line-time">{clock(sentence.start)}</span><div>{words.map((word, wordIndex) => {
+          const index = word.wordIndex ?? wordIndex;
+          return <span className={`caption-word ${playhead >= word.start && playhead <= word.end ? "playing" : ""}`} key={index}><button type="button" onClick={() => { if (videoRef.current) videoRef.current.currentTime = word.start / 1000; }}>{word.text}</button><input aria-label={`Edit word ${word.text}`} value={captionDraft[index] ?? word.text} onChange={(event) => updateCaptionWord(index, event.currentTarget.value)} /></span>;
+        })}</div></div>;
+      })}</div> : <p className="muted">Transcript will appear when transcription completes.</p>}</aside>
     </div>
   </section>;
 }

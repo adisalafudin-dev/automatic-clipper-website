@@ -34,3 +34,9 @@ export async function getTranscript(id: string): Promise<UiSentence[]> {
   const result = await request<{ sentences: UiSentence[] }>(`/jobs/${encodeURIComponent(id)}/transcript`);
   return result.sentences;
 }
+
+export async function saveClipEdit(jobId: string, clipId: string, payload: Record<string, unknown>): Promise<void> {
+  await request(`/jobs/${encodeURIComponent(jobId)}/clips/${encodeURIComponent(clipId)}`, {
+    method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(payload),
+  });
+}

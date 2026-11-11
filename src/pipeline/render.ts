@@ -2,12 +2,12 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import type { Transcript, Word } from "../types.ts";
 import type { ClipCandidate } from "./candidates.ts";
-import { buildAss, type CaptionStyle } from "./captions.ts";
+import { applyCaptionWordEdits, buildAss, type CaptionStyle } from "./captions.ts";
 import { keepSpans, outputOffsetMs, spanDuration, wordsOnOutputTimeline, type SourceSpan } from "./pauses.ts";
 import { sampleFaceCenters, type FaceCenterSample } from "../vision/faces.ts";
 
 export type LayoutPreset = "crop" | "blurred" | "stacked";
-export type ClipRenderEdit = { startMs?: number; endMs?: number; caption?: string; style?: CaptionStyle; titleOverlay?: boolean; layout?: LayoutPreset; origStartMs?: number; origEndMs?: number };
+export type ClipRenderEdit = { startMs?: number; endMs?: number; caption?: string; captionWords?: Array<{ wordIndex: number; text: string }>; style?: CaptionStyle; titleOverlay?: boolean; layout?: LayoutPreset; origStartMs?: number; origEndMs?: number };
 
 export type RenderedClip = {
   id: string;
@@ -200,11 +200,12 @@ export async function renderClips(
       }
     }
     const override = edit?.caption?.trim();
+    const transcriptWords = applyCaptionWordEdits(transcript.words, edit?.captionWords);
     const captionWords = override
       ? spreadCaptionWords(override, outputDuration)
       : multiple
-        ? wordsOnOutputTimeline(transcript.words, pauses)
-        : transcript.words;
+        ? wordsOnOutputTimeline(transcriptWords, pauses)
+        : transcriptWords;
     const captionStart = override || multiple ? 0 : renderStart;
     const captionEnd = override || multiple ? outputDuration : renderEnd;
     await Bun.write(captionsPath, buildAss(

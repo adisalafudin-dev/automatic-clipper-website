@@ -134,10 +134,11 @@ test("UI endpoints serve byte ranges, transcript sentences, and create, render, 
     expect(badRange.status).toBe(416);
 
     const transcript = await fetch(`${baseUrl}/jobs/${jobId}/transcript`);
-    const transcriptBody = await transcript.json() as { sentences: Array<{ id: number; start: number; end: number; words: unknown[] }> };
+    const transcriptBody = await transcript.json() as { sentences: Array<{ id: number; start: number; end: number; words: Array<{ wordIndex: number }> }> };
     expect(transcriptBody.sentences).toHaveLength(1);
     expect(transcriptBody.sentences[0]).toMatchObject({ id: 0, start: 0, end: 31_000 });
     expect(transcriptBody.sentences[0]!.words).toHaveLength(2);
+    expect(transcriptBody.sentences[0]!.words[0]!.wordIndex).toBe(0);
 
     const clipFile = await fetch(`${baseUrl}/jobs/${jobId}/clips/clip-01/file`, { headers: { range: "bytes=1-2" } });
     expect(clipFile.status).toBe(206);
@@ -302,17 +303,24 @@ test("browser upload supports preview, trim and caption edits, and queued rerend
 
     const edit = await fetch(`${baseUrl}/jobs/${created.id}/clips/clip-01`, {
       method: "PATCH", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ start: 1_000, end: 31_000, caption: "A custom caption", style: "bold", titleOverlay: true, layout: "blurred" }),
+      body: JSON.stringify({ start: 1_000, end: 31_000, caption: "A custom caption", captionWords: [{ wordIndex: 0, text: "Hi" }], style: "bold", titleOverlay: true, layout: "blurred" }),
     });
     expect(edit.status).toBe(200);
     const saved = await fetch(`${baseUrl}/jobs/${created.id}`);
-    const savedBody = await saved.json() as { edits: Record<string, { caption: string; style: string; titleOverlay: boolean; layout?: string; origStartMs: number; origEndMs: number }> };
+    const savedBody = await saved.json() as { edits: Record<string, { caption: string; captionWords?: Array<{ wordIndex: number; text: string }>; style: string; titleOverlay: boolean; layout?: string; origStartMs: number; origEndMs: number }> };
     expect(savedBody.edits["clip-01"]!.caption).toBe("A custom caption");
     expect(savedBody.edits["clip-01"]!.style).toBe("bold");
     expect(savedBody.edits["clip-01"]!.titleOverlay).toBe(true);
     expect(savedBody.edits["clip-01"]!.layout).toBe("blurred");
     expect(savedBody.edits["clip-01"]!.origStartMs).toBe(0);
     expect(savedBody.edits["clip-01"]!.origEndMs).toBe(30_000);
+    expect(savedBody.edits["clip-01"]!.captionWords).toEqual([{ wordIndex: 0, text: "Hi" }]);
+
+    const invalidWordEdit = await fetch(`${baseUrl}/jobs/${created.id}/clips/clip-01`, {
+      method: "PATCH", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ startMs: 1_000, endMs: 31_000, caption: "", captionWords: [{ wordIndex: 5, text: "outside" }] }),
+    });
+    expect(invalidWordEdit.status).toBe(400);
 
     const shortTrim = await fetch(`${baseUrl}/jobs/${created.id}/clips/clip-01`, {
       method: "PATCH", headers: { "content-type": "application/json" },
@@ -320,8 +328,9 @@ test("browser upload supports preview, trim and caption edits, and queued rerend
     });
     expect(shortTrim.status).toBe(200);
     const trimmed = await fetch(`${baseUrl}/jobs/${created.id}`);
-    const trimmedBody = await trimmed.json() as { edits: Record<string, { startMs: number; endMs: number; origStartMs: number; origEndMs: number }> };
+    const trimmedBody = await trimmed.json() as { edits: Record<string, { startMs: number; endMs: number; origStartMs: number; origEndMs: number; captionWords?: Array<{ wordIndex: number; text: string }> }> };
     expect(trimmedBody.edits["clip-01"]).toMatchObject({ startMs: 1_000, endMs: 10_000, origStartMs: 0, origEndMs: 30_000 });
+    expect(trimmedBody.edits["clip-01"]!.captionWords).toEqual([{ wordIndex: 0, text: "Hi" }]);
 
     const rerender = await fetch(`${baseUrl}/jobs/${created.id}/render`, { method: "POST" });
     expect(rerender.status).toBe(202);

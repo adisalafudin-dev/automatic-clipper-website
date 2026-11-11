@@ -3,6 +3,15 @@ import type { Word } from "../types.ts";
 export type CaptionWord = { text: string; start: number; end: number };
 export type CaptionEvent = { start: number; end: number; words: CaptionWord[] };
 export type CaptionStyle = "classic" | "bold" | "clean";
+export type CaptionWordEdit = { wordIndex: number; text: string };
+
+export function applyCaptionWordEdits(words: Word[], edits: CaptionWordEdit[] = []): Word[] {
+  const replacements = new Map(edits.map((edit) => [edit.wordIndex, edit.text]));
+  return words.flatMap((word, wordIndex) => {
+    const text = replacements.get(wordIndex) ?? word.text;
+    return text.trim() ? [{ ...word, text: text.trim() }] : [];
+  });
+}
 
 const SENTENCE_END = /[.!?]["'”’)]*$/;
 
