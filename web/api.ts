@@ -1,4 +1,4 @@
-import type { JobListItem, JobView, UiClipEdit } from "../src/types.ts";
+import type { JobListItem, JobView, UiClipEdit, UiSentence } from "../src/types.ts";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
@@ -28,4 +28,9 @@ export async function uploadVideo(file: File, faceTracking: boolean): Promise<Jo
 
 export async function getJob(id: string): Promise<{ job: JobView; edits: Record<string, UiClipEdit> }> {
   return await request(`/jobs/${encodeURIComponent(id)}`);
+}
+
+export async function getTranscript(id: string): Promise<UiSentence[]> {
+  const result = await request<{ sentences: UiSentence[] }>(`/jobs/${encodeURIComponent(id)}/transcript`);
+  return result.sentences;
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { JobListItem } from "../src/types.ts";
 import { getJob, getJobs, uploadVideo } from "./api.ts";
+import { JobEditor } from "./JobEditor.tsx";
 
 export function App() {
   const [jobs, setJobs] = useState<JobListItem[]>([]);
@@ -65,7 +66,7 @@ export function App() {
       <div className="section-title"><div><p className="eyebrow">YOUR WORKSPACE</p><h2>Recent projects</h2></div><button className="button quiet" onClick={() => void refresh()}>Refresh</button></div>
       {error && <p className="error" role="alert">{error}</p>}
       {loading ? <p className="muted">Loading projects…</p> : jobs.length === 0 ? <p className="muted">No projects yet. Upload a video to get started.</p> : <ul className="job-list">{jobs.map((job) => <li className={`job-row ${selectedId === job.id ? "selected" : ""}`} key={job.id} onClick={() => { setSelectedId(job.id); void getJob(job.id).then(setSelectedJob).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason))); }}><div className="job-info"><strong>{job.filename}</strong><span className="muted">{job.stage} · {job.progress}%</span><div className="progress-track"><div className="progress-fill" style={{ width: `${job.progress}%` }} /></div>{job.error && <span className="error">{job.error}</span>}</div><span className={`badge ${job.status}`}>{job.status}</span></li>)}</ul>}
-      {selectedJob && <p className="muted selected-summary">Selected: {selectedJob.job.filename} · {selectedJob.job.status}</p>}
+      {selectedJob && <JobEditor detail={selectedJob} />}
     </section>
     <footer>Videos stay on this computer · CPU rendering</footer>
   </main>;
