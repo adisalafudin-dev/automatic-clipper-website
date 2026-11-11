@@ -31,10 +31,23 @@ export function JobEditor({ detail, onEditSaved }: Props) {
 
   useEffect(() => {
     let active = true;
-    void getTranscript(job.id).then((items) => { if (active) setSentences(items); })
-      .catch((reason: unknown) => { if (active) setLoadError(reason instanceof Error ? reason.message : String(reason)); });
-    return () => { active = false; };
-  }, [job.id]);
+    let timer = 0;
+    const loadTranscript = async () => {
+      try {
+        const items = await getTranscript(job.id);
+        if (!active) return;
+        setSentences(items);
+        setLoadError("");
+        if (items.length === 0 && (job.status === "queued" || job.status === "running")) {
+          timer = window.setTimeout(() => void loadTranscript(), 1_500);
+        }
+      } catch (reason) {
+        if (active) setLoadError(reason instanceof Error ? reason.message : String(reason));
+      }
+    };
+    void loadTranscript();
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [job.id, job.status]);
 
   useEffect(() => {
     const video = videoRef.current;

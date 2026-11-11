@@ -78,7 +78,7 @@ Copy-Item .env.example .env
 docker compose up --build
 ```
 
-Open <http://127.0.0.1:3000>. On first start, Compose downloads the default `base` Whisper model (about 142 MiB) into `models/`; `data/` and `models/` persist on the host. Set `WHISPER_MODEL=small` to use a locally downloaded small model. The default container LLM URL is `http://192.168.1.19:5678/v1`; override `LLM_BASE_URL` in `.env` for another reachable 9Router address. `docker compose down` stops the app and keeps both directories.
+Open <http://127.0.0.1:3000>. On first start, Compose downloads the default `base` Whisper model (about 142 MiB) into `models/`; uploaded videos and generated files in `data/` and models persist on the host. Docker keeps the SQLite job database in its own persistent volume so Linux SQLite can use reliable file locking on Windows. Set `WHISPER_MODEL=small` to use a locally downloaded small model. The default container LLM URL is `http://192.168.1.19:5678/v1`; override `LLM_BASE_URL` in `.env` for another reachable 9Router address. `docker compose down` stops the app and keeps all data volumes.
 
 ## For contributors and coding agents
 

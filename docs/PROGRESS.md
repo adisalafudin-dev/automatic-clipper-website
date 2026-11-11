@@ -16,7 +16,7 @@ Phase: 8 | Branch: phase-8-docker
 - Pause trim: gaps over 600 ms between words are cut to a 120 ms breath on each side. Leading and trailing silence uses the same pad.
 - Captions are retimed onto the concatenated timeline. Manifest `duration` is the rendered length; `start` and `end` stay the source window.
 - `bun run check` covers the span math, FFmpeg concat args, and a real trimmed fixture.
-- Phase 8: Dockerfile builds CPU whisper.cpp; Compose runs API/UI/worker with FFmpeg and persistent data/model volumes.
+- Phase 8: Dockerfile builds CPU whisper.cpp; Compose runs API/UI/worker with FFmpeg and persistent media/model volumes plus a Linux SQLite volume.
 - Whisper binary and model paths are configurable; the default model downloads to the mounted models directory at first start.
 
 ## Next
@@ -26,6 +26,7 @@ Phase: 8 | Branch: phase-8-docker
 ## Known bugs / open questions
 
 - Full Docker pipeline e2e and matching output comparison are unverified because no sample video or `.env` key is available.
+- The Docker SQLite database is isolated in a named volume; the pre-existing `data/jobs.sqlite` remains untouched on the host.
 - Face tracking quality depends on face size and visibility in the five-second samples.
 - Cached clips keep the old cut until a rerender with `--force` or the UI render button.
 - The untracked `whisper.cpp/` source tree is excluded from project typecheck and test discovery; it is not included in project commits.

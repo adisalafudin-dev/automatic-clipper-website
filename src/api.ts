@@ -186,7 +186,15 @@ export function createJobApi(
       if (transcriptMatch && request.method === "GET") {
         const job = store.get(decodeURIComponent(transcriptMatch[1]!));
         if (!job) return json({ error: "Job not found" }, 404);
-        const transcript = JSON.parse(await readFile(path.join(jobRoot, job.id, "transcript.json"), "utf8")) as Transcript;
+        let transcript: Transcript;
+        try {
+          transcript = JSON.parse(await readFile(path.join(jobRoot, job.id, "transcript.json"), "utf8")) as Transcript;
+        } catch (error) {
+          if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+            return json({ sentences: [] });
+          }
+          throw error;
+        }
         const sentences = transcriptSentences(transcript).map((sentence) => ({
           ...sentence,
           words: transcript.words.flatMap((word, wordIndex) => word.start < sentence.end && word.end > sentence.start

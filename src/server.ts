@@ -10,7 +10,7 @@ import appHtml from "../web/index.html";
 async function main() {
   await checkFfmpeg();
   await mkdir("data", { recursive: true });
-  const database = new Database(path.join("data", "jobs.sqlite"));
+  const database = new Database(process.env.JOB_DB_PATH ?? path.join("data", "jobs.sqlite"));
   database.exec("PRAGMA journal_mode = WAL;");
   const store = new JobStore(database);
   const queue = new JobQueue(store);

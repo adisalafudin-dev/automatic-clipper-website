@@ -89,6 +89,27 @@ test("HTTP API accepts jobs, exposes persisted stage progress, and returns resul
   }
 });
 
+test("transcript endpoint stays available while transcription has not produced a file", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "clipper-pending-transcript-"));
+  const sourcePath = path.join(temp, "source.mp4");
+  await Bun.write(sourcePath, "fixture");
+  const db = new Database(":memory:");
+  const store = new JobStore(db);
+  const job = store.create("pending-transcript", sourcePath);
+  const queue = new JobQueue(store, async () => fixtureResult());
+  const app = createJobApi(store, queue, { jobRoot: path.join(temp, "jobs") });
+  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: app.fetch });
+  try {
+    const response = await fetch(`http://127.0.0.1:${server.port}/jobs/${job.id}/transcript`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ sentences: [] });
+  } finally {
+    server.stop(true);
+    db.close();
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
 test("UI endpoints serve byte ranges, transcript sentences, and create, render, and delete clips", async () => {
   const temp = await mkdtemp(path.join(os.tmpdir(), "clipper-ui-api-"));
   const jobId = "ui-job";

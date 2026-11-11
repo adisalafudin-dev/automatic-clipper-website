@@ -47,3 +47,4 @@ Format: `date | decision | reason`
 2026-11-11 | Docker builds whisper.cpp for CPU in a Linux build stage and keeps the base model in a persistent host-mounted volume | Keeps compiler and model out of the runtime image while supporting first-run transcription.
 2026-11-11 | Docker Compose runs the UI, API, and worker in one container and mounts `data/` and `models/` | Matches the local single-queue architecture and keeps generated media and model files persistent and out of the image.
 2026-11-11 | Container 9Router defaults to `http://192.168.1.19:5678/v1` and remains configurable through environment variables | Matches the configured phone endpoint while allowing other network setups.
+2026-11-12 | Docker stores SQLite in a named Linux volume, separate from the Windows bind-mounted media directory | Prevents SQLite WAL and locking from depending on Windows bind-mount file semantics while keeping uploads and renders host-visible.
