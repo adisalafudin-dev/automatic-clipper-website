@@ -5,7 +5,7 @@ import { checkFfmpeg } from "./ffmpeg/check.ts";
 import { createJobApi } from "./api.ts";
 import { JobQueue } from "./state/queue.ts";
 import { JobStore } from "./state/jobs.ts";
-import { uiResponse } from "./ui.ts";
+import appHtml from "../web/index.html";
 
 async function main() {
   await checkFfmpeg();
@@ -22,7 +22,8 @@ async function main() {
     hostname: process.env.HOST ?? "127.0.0.1",
     port: rawPort,
     maxRequestBodySize: 2_000_000_000,
-    fetch: async (request) => (await uiResponse(request)) ?? createJobApi(store, queue).fetch(request),
+    routes: { "/": appHtml },
+    fetch: (request) => createJobApi(store, queue).fetch(request),
   });
   console.log(`Video Clipper API listening at http://${server.hostname}:${server.port}`);
 

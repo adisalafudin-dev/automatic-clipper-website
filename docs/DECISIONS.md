@@ -39,3 +39,4 @@ Format: `date | decision | reason`
 2026-11-11 | Continue with UI-spec.md after Phase 7 and before Phase 8 | The user explicitly requested the UI specification work and Dockerization without pausing at phase gates.
 2026-11-11 | Keep UI API routes under the existing `/jobs` prefix and add the missing source, transcript, clip, and range behavior there | Preserves existing browser and CLI compatibility while satisfying the UI flows.
 2026-11-11 | Typecheck and test project files only; `bun run test` targets `src` and TypeScript excludes the untracked `whisper.cpp` tree | Keeps this repository's checks isolated from a separate source tree present in the workspace.
+2026-11-11 | UI uses React 19 and React DOM with TypeScript, plain CSS, and Bun HTML imports | Implements UI-spec while keeping the same-origin Bun server and avoiding a separate frontend server or state/router packages.

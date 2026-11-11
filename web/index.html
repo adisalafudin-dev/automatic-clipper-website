@@ -5,49 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#101311">
     <title>Cutroom — Video Clipper</title>
-    <link rel="stylesheet" href="/styles.css">
-    <script src="/app.js" defer></script>
+    <link rel="stylesheet" href="./styles.css">
   </head>
   <body>
-    <header class="topbar">
-      <a class="brand" href="/" aria-label="Cutroom home"><span class="brand-mark">C</span><span>cutroom<span class="brand-dot">.</span></span></a>
-      <div class="local-label"><span class="live-dot"></span> LOCAL WORKSPACE</div>
-    </header>
-    <main>
-      <section class="intro">
-        <div class="eyebrow">VIDEO CLIPPER <span>·</span> HERMES-MAIN</div>
-        <h1>Make the moments<br><em>worth sharing.</em></h1>
-        <p>Drop in a long video. Review the cuts, fine-tune the captions, and render your highlights.</p>
-      </section>
-
-      <section class="upload-panel" aria-labelledby="upload-title">
-        <form id="upload-form">
-          <label class="dropzone" id="dropzone" for="video-file">
-            <span class="upload-icon" aria-hidden="true">↑</span>
-            <span class="drop-main" id="upload-title">Drop your video here</span>
-            <span class="drop-sub">or <span class="browse-link">browse files</span> · MP4, MOV, MKV, WEBM · up to 2 GB</span>
-            <input id="video-file" type="file" name="video" accept="video/mp4,video/quicktime,video/x-matroska,video/webm,.m4v" required>
-          </label>
-          <div class="upload-actions">
-            <div class="privacy-note"><span class="lock-icon">◈</span> Your video stays on this computer</div>
-            <label class="face-tracking-option" title="Install the local model with bun run download-face-model. If it is missing, rendering uses a center crop."><input id="face-tracking" type="checkbox"> Track faces <span>(model required; center fallback)</span></label>
-            <button class="button button-primary" type="submit" id="submit-button">Create clips <span aria-hidden="true">↗</span></button>
-          </div>
-        </form>
-        <div class="notice" id="notice" role="status" hidden></div>
-      </section>
-
-      <section class="workspace" aria-label="Clip workspace">
-        <div class="section-heading">
-          <div><div class="eyebrow">YOUR WORKSPACE</div><h2>Recent projects</h2></div>
-          <button class="button button-quiet" id="refresh-button" type="button">↻ <span>Refresh</span></button>
-        </div>
-        <div class="workspace-grid">
-          <div class="project-list" id="project-list"><div class="empty-state">Your projects will show up here.</div></div>
-          <div class="project-detail" id="project-detail"><div class="detail-empty"><div class="play-outline">▶</div><strong>Choose a project</strong><span>Your clips and editing controls will appear here.</span></div></div>
-        </div>
-      </section>
-    </main>
-    <footer><span>Cutroom runs locally on your machine.</span><span>BUILT FOR THE GOOD PARTS <span class="brand-dot">✳</span></span></footer>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
   </body>
 </html>

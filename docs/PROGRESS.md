@@ -5,14 +5,15 @@ Phase: 6 | Branch: phase-6-ui-spec
 ## Done
 
 - Phase 7 complete: caption presets, centered safe-area captions, hook-title overlays, opt-in YuNet face tracking, crop/blurred/stacked layout presets, and pause trimming.
-- UI-spec 6.0: source/transcript reads, byte-range media responses, selection clip creation, clip deletion, and per-clip render endpoints.
+- UI-spec 6.0 API routes are tested for source/transcript reads, byte ranges, selection clip creation, deletion, and per-clip rendering.
+- UI-spec 6.1: React + TypeScript page is bundled by Bun and lists persisted jobs.
 - Pause trim: gaps over 600 ms between words are cut to a 120 ms breath on each side. Leading and trailing silence uses the same pad.
 - Captions are retimed onto the concatenated timeline. Manifest `duration` is the rendered length; `start` and `end` stay the source window.
 - `bun run check` covers the span math, FFmpeg concat args, and a real trimmed fixture.
 
 ## Next
 
-- UI-spec 6.1: React + TypeScript scaffold served and bundled by Bun.
+- UI-spec 6.2: video upload, 2-second job polling, progress, and visible failures.
 
 ## Known bugs / open questions
 

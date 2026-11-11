@@ -21,3 +21,13 @@ export type Transcript = {
   language: string;
   words: Word[];
 };
+
+export type JobListItem = {
+  id: string;
+  filename: string;
+  status: "queued" | "running" | "completed" | "failed";
+  stage: string;
+  progress: number;
+  error: string | null;
+  createdAt: string;
+};

@@ -157,7 +157,10 @@ export function createJobApi(
       if (url.pathname === "/jobs" && request.method === "GET") {
         const rawLimit = Number(url.searchParams.get("limit") ?? "50");
         const limit = Number.isInteger(rawLimit) ? Math.max(1, Math.min(100, rawLimit)) : 50;
-        return json({ jobs: store.list(limit) });
+        return json({ jobs: store.list(limit).map((job) => ({
+          ...job,
+          filename: path.basename(job.videoPath),
+        })) });
       }
 
       const jobMatch = url.pathname.match(/^\/jobs\/([^/]+)$/);
