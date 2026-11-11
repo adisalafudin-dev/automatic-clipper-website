@@ -11,14 +11,14 @@ Phase: 7 | Branch: phase-7-rubric
 
 ## Next
 
-- Run `bun run check` and commit the layout preset feature.
+- Implement `UI-spec.md`, then continue to Phase 8 Dockerization.
 
 ## Known bugs / open questions
 
 - `assets/raw/sample.mp4` is a song and yielded no candidates.
 - Face tracking quality depends on face size and visibility in the five-second samples.
 - Cached clips keep the old cut until a rerender with `--force` or the UI render button.
-- `bun` is not available on PATH in the current environment, so `bun run check` could not start.
+- UI-spec API requirements need to be reconciled with the existing `/jobs` API before the React client is built.
 
 ## Run
 

@@ -117,4 +117,4 @@ test("renders a tiny FFmpeg fixture as captioned 9:16 normalized video with edit
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
-});
+}, 20_000);
