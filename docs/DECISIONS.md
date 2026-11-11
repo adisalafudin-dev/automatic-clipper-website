@@ -34,3 +34,4 @@ Format: `date | decision | reason`
 
 2026-11-09 | Caption presets use vertical and horizontal center alignment | Keeps subtitles in the center safe area, away from short-video account labels and controls near the bottom
 2026-11-10 | Pause trim drops inter-word gaps over 600 ms, leaving 120 ms of breath on each side, and trims leading and trailing silence to that pad | Word timestamps are already cached, so dead air can be cut without a second silence detector. Source start and end stay on the clip so manual trims still edit the original range.
+2026-11-11 | Phase 7 layout presets are center crop, blurred background with a fitted foreground, and two stacked fitted panels | Offers common vertical treatments through the existing per-clip edit and rerender flow, with crop remaining the default.

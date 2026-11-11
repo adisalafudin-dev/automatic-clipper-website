@@ -73,3 +73,21 @@ test("face crop arguments interpolate the smoothed crop path and clamp it to the
   expect(args[args.indexOf("-vf") + 1]).toContain("if(lt(t\\,2.50)");
   expect(args[args.indexOf("-vf") + 1]).toContain("iw-ow");
 });
+
+test("blurred layout builds a full-frame background and fitted foreground", () => {
+  const args = buildRenderArgs("video.mp4", "clips/clip.mp4", "captions/clip.ass", 0, 30_000, [], [], "blurred");
+  const graph = args[args.indexOf("-filter_complex") + 1]!;
+  expect(graph).toContain("scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=28");
+  expect(graph).toContain("force_original_aspect_ratio=decrease,pad=1080:1920");
+  expect(graph).toContain("overlay=0:0,subtitles=filename='captions/clip.ass'");
+});
+
+test("stacked layout creates two fitted panels and composes with pause concatenation", () => {
+  const args = buildRenderArgs("video.mp4", "clips/clip.mp4", "captions/clip.ass", 0, 30_000, [], [
+    { start: 0, end: 10_000 }, { start: 20_000, end: 30_000 },
+  ], "stacked");
+  const graph = args[args.indexOf("-filter_complex") + 1]!;
+  expect(graph).toContain("concat=n=2:v=1:a=1[vcat][acat]");
+  expect(graph).toContain("scale=1080:960:force_original_aspect_ratio=decrease");
+  expect(graph).toContain("vstack=inputs=2,subtitles=filename='captions/clip.ass'[vout]");
+});

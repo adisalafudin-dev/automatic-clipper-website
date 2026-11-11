@@ -58,7 +58,7 @@ function renderProject(job, edits = {}) {
         <label>Start (sec)<input name="start" type="number" min="0" step="0.1" value="${(clip.start / 1000).toFixed(1)}" required></label>
         <label>End (sec)<input name="end" type="number" min="0" step="0.1" value="${(clip.end / 1000).toFixed(1)}" required></label></div>
         <label class="caption-label caption-field">Replace captions<textarea name="caption" class="caption-edit" maxlength="2000" placeholder="Leave blank to keep the transcript captions">${esc(edits[clip.id]?.caption || "")}</textarea></label>
-        <div class="edit-fields style-fields"><label>Caption style<select name="style"><option value="classic" ${!edits[clip.id]?.style || edits[clip.id]?.style === "classic" ? "selected" : ""}>Classic</option><option value="bold" ${edits[clip.id]?.style === "bold" ? "selected" : ""}>Bold</option><option value="clean" ${edits[clip.id]?.style === "clean" ? "selected" : ""}>Clean</option></select></label><label class="toggle-label"><input name="titleOverlay" type="checkbox" ${edits[clip.id]?.titleOverlay ? "checked" : ""}> Hook title overlay</label></div>
+        <div class="edit-fields style-fields"><label>Caption style<select name="style"><option value="classic" ${!edits[clip.id]?.style || edits[clip.id]?.style === "classic" ? "selected" : ""}>Classic</option><option value="bold" ${edits[clip.id]?.style === "bold" ? "selected" : ""}>Bold</option><option value="clean" ${edits[clip.id]?.style === "clean" ? "selected" : ""}>Clean</option></select></label><label>Layout<select name="layout"><option value="crop" ${!edits[clip.id]?.layout || edits[clip.id]?.layout === "crop" ? "selected" : ""}>Center crop</option><option value="blurred" ${edits[clip.id]?.layout === "blurred" ? "selected" : ""}>Blurred background</option><option value="stacked" ${edits[clip.id]?.layout === "stacked" ? "selected" : ""}>Stacked</option></select></label><label class="toggle-label"><input name="titleOverlay" type="checkbox" ${edits[clip.id]?.titleOverlay ? "checked" : ""}> Hook title overlay</label></div>
         <div class="clip-actions"><span class="detail-subtitle">30–90 sec · timed karaoke words</span><button type="submit" class="button button-secondary">Save edit</button></div></form></div></article>`).join("");
     content += "</div>";
   } else if (job.status === "completed") {
@@ -120,6 +120,7 @@ async function saveEdit(event) {
     caption: String(values.get("caption") || ""),
     style: String(values.get("style") || "classic"),
     titleOverlay: values.get("titleOverlay") === "on",
+    layout: String(values.get("layout") || "crop"),
   };
   const button = editForm.querySelector("button[type=submit]");
   button.disabled = true;

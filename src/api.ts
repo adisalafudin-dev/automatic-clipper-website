@@ -187,6 +187,9 @@ export function createJobApi(
         if (payload.titleOverlay !== undefined && typeof payload.titleOverlay !== "boolean") {
           return json({ error: "titleOverlay must be a boolean" }, 400);
         }
+        if (payload.layout !== undefined && !["crop", "blurred", "stacked"].includes(String(payload.layout))) {
+          return json({ error: "layout must be crop, blurred, or stacked" }, 400);
+        }
         const clipIndex = job.result.clips.findIndex((item) => item.id === editMatch[2]);
         if (clipIndex < 0) return json({ error: "Clip not found" }, 404);
         const oldClip = job.result.clips[clipIndex]!;
@@ -215,6 +218,7 @@ export function createJobApi(
           caption: payload.caption.trim(),
           style: (payload.style as ClipRenderEdit["style"] | undefined) ?? previous.style ?? "classic",
           titleOverlay: (payload.titleOverlay as boolean | undefined) ?? previous.titleOverlay ?? false,
+          layout: (payload.layout as ClipRenderEdit["layout"] | undefined) ?? previous.layout ?? "crop",
         };
         await writeFile(path.join(jobDir, "edits.json"), JSON.stringify(edits, null, 2));
         return json({ ok: true, edits });

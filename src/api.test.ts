@@ -225,14 +225,15 @@ test("browser upload supports preview, trim and caption edits, and queued rerend
 
     const edit = await fetch(`${baseUrl}/jobs/${created.id}/clips/clip-01`, {
       method: "PATCH", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ start: 1_000, end: 31_000, caption: "A custom caption", style: "bold", titleOverlay: true }),
+      body: JSON.stringify({ start: 1_000, end: 31_000, caption: "A custom caption", style: "bold", titleOverlay: true, layout: "blurred" }),
     });
     expect(edit.status).toBe(200);
     const saved = await fetch(`${baseUrl}/jobs/${created.id}`);
-    const savedBody = await saved.json() as { edits: Record<string, { caption: string; style: string; titleOverlay: boolean }> };
+    const savedBody = await saved.json() as { edits: Record<string, { caption: string; style: string; titleOverlay: boolean; layout?: string }> };
     expect(savedBody.edits["clip-01"]!.caption).toBe("A custom caption");
     expect(savedBody.edits["clip-01"]!.style).toBe("bold");
     expect(savedBody.edits["clip-01"]!.titleOverlay).toBe(true);
+    expect(savedBody.edits["clip-01"]!.layout).toBe("blurred");
 
     const rerender = await fetch(`${baseUrl}/jobs/${created.id}/render`, { method: "POST" });
     expect(rerender.status).toBe(202);

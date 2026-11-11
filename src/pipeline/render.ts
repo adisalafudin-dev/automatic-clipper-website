@@ -6,7 +6,8 @@ import { buildAss, type CaptionStyle } from "./captions.ts";
 import { keepSpans, outputOffsetMs, spanDuration, wordsOnOutputTimeline, type SourceSpan } from "./pauses.ts";
 import { sampleFaceCenters, type FaceCenterSample } from "../vision/faces.ts";
 
-export type ClipRenderEdit = { caption?: string; style?: CaptionStyle; titleOverlay?: boolean };
+export type LayoutPreset = "crop" | "blurred" | "stacked";
+export type ClipRenderEdit = { caption?: string; style?: CaptionStyle; titleOverlay?: boolean; layout?: LayoutPreset };
 
 export type RenderedClip = {
   id: string;
@@ -53,6 +54,23 @@ function pictureFilters(cropX: string, assRelative: string): string {
   ].join(",");
 }
 
+function layoutGraph(inputLabel: string, outputLabel: string, layout: LayoutPreset, cropX: string, assRelative: string): string {
+  const subtitles = `subtitles=filename='${slashPath(assRelative)}'`;
+  if (layout === "crop") return `${inputLabel}${pictureFilters(cropX, assRelative)}[${outputLabel}]`;
+  if (layout === "blurred") {
+    // Fill the canvas with a blurred copy, then center a full-frame copy above it.
+    return `${inputLabel}split=2[${outputLabel}bg0][${outputLabel}fg0];` +
+      `[${outputLabel}bg0]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=28[${outputLabel}bg];` +
+      `[${outputLabel}fg0]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black[${outputLabel}fg];` +
+      `[${outputLabel}bg][${outputLabel}fg]overlay=0:0,${subtitles}[${outputLabel}]`;
+  }
+  // Stack two width-fitted copies in equal-height panels for a landscape source.
+  return `${inputLabel}split=2[${outputLabel}top0][${outputLabel}bottom0];` +
+    `[${outputLabel}top0]scale=1080:960:force_original_aspect_ratio=decrease,pad=1080:960:(ow-iw)/2:(oh-ih)/2:color=black[${outputLabel}top];` +
+    `[${outputLabel}bottom0]scale=1080:960:force_original_aspect_ratio=decrease,pad=1080:960:(ow-iw)/2:(oh-ih)/2:color=black[${outputLabel}bottom];` +
+    `[${outputLabel}top][${outputLabel}bottom]vstack=inputs=2,${subtitles}[${outputLabel}]`;
+}
+
 export function buildRenderArgs(
   input: string,
   output: string,
@@ -61,6 +79,7 @@ export function buildRenderArgs(
   end: number,
   faceCenters: FaceCenterSample[] = [],
   pauses: SourceSpan[] = [],
+  layout: LayoutPreset = "crop",
 ): string[] {
   const seconds = (ms: number) => (ms / 1000).toFixed(3);
   const cropX = cropXExpression(faceCenters);
@@ -80,12 +99,22 @@ export function buildRenderArgs(
       inputs.push(`[v${index}][a${index}]`);
     });
     chains.push(`${inputs.join("")}concat=n=${pauses.length}:v=1:a=1[vcat][acat]`);
-    chains.push(`[vcat]${pictureFilters(cropX, assRelative)}[vout]`);
+    chains.push(layoutGraph("[vcat]", "vout", layout, cropX, assRelative));
     chains.push("[acat]loudnorm=I=-16:TP=-1.5:LRA=11[aout]");
     return [
       "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
       "-ss", seconds(start), "-i", input, "-t", seconds(end - start),
       "-filter_complex", chains.join(";"),
+      "-map", "[vout]", "-map", "[aout]",
+      ...encode,
+    ];
+  }
+  if (layout !== "crop") {
+    // Complex filters are used for multi-layer layouts; audio remains a separate normalized chain.
+    return [
+      "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+      "-ss", seconds(start), "-i", input, "-t", seconds(end - start),
+      "-filter_complex", `${layoutGraph("[0:v]", "vout", layout, cropX, assRelative)};[0:a]loudnorm=I=-16:TP=-1.5:LRA=11[aout]`,
       "-map", "[vout]", "-map", "[aout]",
       ...encode,
     ];
@@ -195,6 +224,7 @@ export async function renderClips(
         renderEnd,
         faceCenters,
         multiple ? pauses : [],
+        edit?.layout ?? "crop",
       );
       try {
         await runFfmpeg(args, absoluteJobDir);
@@ -202,7 +232,7 @@ export async function renderClips(
         if (!faceTracking || !faceCenters.length) throw error;
         console.warn(`Tracked crop render failed for ${id}; retrying center crop: ${error instanceof Error ? error.message : String(error)}`);
         await runFfmpeg(
-          buildRenderArgs(absoluteVideo, outputRelative, captionsRelative, renderStart, renderEnd, [], multiple ? pauses : []),
+          buildRenderArgs(absoluteVideo, outputRelative, captionsRelative, renderStart, renderEnd, [], multiple ? pauses : [], edit?.layout ?? "crop"),
           absoluteJobDir,
         );
       }
