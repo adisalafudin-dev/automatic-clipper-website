@@ -1,4 +1,4 @@
-import type { JobListItem } from "../src/types.ts";
+import type { JobListItem, JobView, UiClipEdit } from "../src/types.ts";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
@@ -16,4 +16,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export async function getJobs(): Promise<JobListItem[]> {
   const result = await request<{ jobs: JobListItem[] }>("/jobs");
   return result.jobs;
+}
+
+export async function uploadVideo(file: File, faceTracking: boolean): Promise<JobView> {
+  const form = new FormData();
+  form.set("video", file);
+  form.set("faceTracking", String(faceTracking));
+  const result = await request<{ job: JobView }>("/jobs", { method: "POST", body: form });
+  return result.job;
+}
+
+export async function getJob(id: string): Promise<{ job: JobView; edits: Record<string, UiClipEdit> }> {
+  return await request(`/jobs/${encodeURIComponent(id)}`);
 }
