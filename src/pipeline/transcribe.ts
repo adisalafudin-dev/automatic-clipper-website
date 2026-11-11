@@ -2,8 +2,13 @@ import path from "node:path";
 import type { Transcript, WhisperSegment } from "../types.ts";
 import { wordsFromSegments } from "./words.ts";
 
-const WHISPER_BIN = path.join("tools", "whisper", "Release", "whisper-cli.exe");
-const MODELS_DIR = path.join("tools", "whisper", "models");
+const DEFAULT_WHISPER_BIN = path.join(
+  "tools",
+  "whisper",
+  "Release",
+  "whisper-cli.exe",
+);
+const DEFAULT_MODELS_DIR = path.join("tools", "whisper", "models");
 
 // The parts of whisper's -ojf JSON that we read.
 type WhisperJson = {
@@ -21,7 +26,10 @@ export async function transcribe(
 ): Promise<Transcript> {
   const model = process.env.WHISPER_MODEL ?? "base";
   const language = process.env.WHISPER_LANG ?? "en";
-  const modelPath = path.join(MODELS_DIR, `ggml-${model}.bin`);
+  const whisperBin = process.env.WHISPER_BIN ?? DEFAULT_WHISPER_BIN;
+  const modelsDir = process.env.WHISPER_MODELS_DIR ?? DEFAULT_MODELS_DIR;
+  const modelPath =
+    process.env.WHISPER_MODEL_PATH || path.join(modelsDir, `ggml-${model}.bin`);
   const transcriptPath = path.join(jobDir, "transcript.json");
 
   if (!force && (await Bun.file(transcriptPath).exists())) {
@@ -30,8 +38,8 @@ export async function transcribe(
   }
 
   // Fail early with a clear message if something is missing.
-  if (!(await Bun.file(WHISPER_BIN).exists())) {
-    throw new Error(`whisper-cli not found at ${WHISPER_BIN}`);
+  if (!(await Bun.file(whisperBin).exists())) {
+    throw new Error(`whisper-cli not found at ${whisperBin}`);
   }
   if (!(await Bun.file(modelPath).exists())) {
     throw new Error(
@@ -46,7 +54,7 @@ export async function transcribe(
   const outPrefix = path.join(jobDir, "whisper");
 
   const args = [
-    WHISPER_BIN,
+    whisperBin,
     "-m",
     modelPath, // model file
     "-f",

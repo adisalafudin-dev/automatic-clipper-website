@@ -1,6 +1,6 @@
 # Progress
 
-Phase: 6 | Branch: phase-6-ui-spec
+Phase: 8 | Branch: phase-8-docker
 
 ## Done
 
@@ -16,14 +16,16 @@ Phase: 6 | Branch: phase-6-ui-spec
 - Pause trim: gaps over 600 ms between words are cut to a 120 ms breath on each side. Leading and trailing silence uses the same pad.
 - Captions are retimed onto the concatenated timeline. Manifest `duration` is the rendered length; `start` and `end` stay the source window.
 - `bun run check` covers the span math, FFmpeg concat args, and a real trimmed fixture.
+- Phase 8: Dockerfile builds CPU whisper.cpp; Compose runs API/UI/worker with FFmpeg and persistent data/model volumes.
+- Whisper binary and model paths are configurable; the default model downloads to the mounted models directory at first start.
 
 ## Next
 
-- Phase 8: Dockerfile, Compose configuration, and clean checkout smoke run.
+- Phase 8 implementation is complete; full pipeline comparison needs a 5–10 minute user video and a valid 9Router key.
 
 ## Known bugs / open questions
 
-- `assets/raw/sample.mp4` is a song and yielded no candidates.
+- Full Docker pipeline e2e and matching output comparison are unverified because no sample video or `.env` key is available.
 - Face tracking quality depends on face size and visibility in the five-second samples.
 - Cached clips keep the old cut until a rerender with `--force` or the UI render button.
 - The untracked `whisper.cpp/` source tree is excluded from project typecheck and test discovery; it is not included in project commits.
@@ -34,3 +36,4 @@ Phase: 6 | Branch: phase-6-ui-spec
 - `bun run start`
 - `bun run src/cli.ts video.mp4 --force`
 - `bun run dev`
+- `docker compose up --build`

@@ -1,0 +1,17 @@
+.git
+.env
+.env.*
+!.env.example
+node_modules
+data
+models
+tools
+whisper.cpp
+coverage
+dist
+out
+*.mp4
+*.mov
+*.mkv
+*.wav
+*.tgz

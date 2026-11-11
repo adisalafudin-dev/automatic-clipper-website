@@ -44,3 +44,6 @@ Format: `date | decision | reason`
 2026-11-11 | Caption text overrides are stored by transcript word index and retain the original word timestamps | Trim changes can rederive the visible words while preserving edits for all transcript words that remain in range.
 2026-11-11 | Per-clip render state lives in the existing edits.json; the queue merges per-clip and stale-only results into the stored manifest | Keeps durable UI status in the current job layout and prevents one clip render from replacing other clip results.
 2026-11-11 | Transcript selection uses a clicked anchor and shift-click to extend the sentence range | Allows deterministic range selection without adding a timeline or selection library.
+2026-11-11 | Docker builds whisper.cpp for CPU in a Linux build stage and keeps the base model in a persistent host-mounted volume | Keeps compiler and model out of the runtime image while supporting first-run transcription.
+2026-11-11 | Docker Compose runs the UI, API, and worker in one container and mounts `data/` and `models/` | Matches the local single-queue architecture and keeps generated media and model files persistent and out of the image.
+2026-11-11 | Container 9Router defaults to `http://192.168.1.19:5678/v1` and remains configurable through environment variables | Matches the configured phone endpoint while allowing other network setups.

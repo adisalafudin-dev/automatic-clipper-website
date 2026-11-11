@@ -2,14 +2,14 @@
 
 Video Clipper is a local Web app that turns a long spoken video into short, vertical clips. It transcribes speech, asks a model for moments worth clipping, then renders 9:16 videos with word-timed captions. The web app lets you upload videos, follow jobs, preview clips, adjust trims and captions, and rerender.
 
-The project is on Phase 7. Docker support is the planned Phase 8; see `AGENTS.md` for the phase gates and requirements.
+The Phase 7 pipeline and UI are complete. Docker runs the API, UI, worker, FFmpeg, and CPU whisper.cpp in one container.
 
 ## What you need
 
 - Windows and [Bun](https://bun.sh/).
 - `ffmpeg` and `ffprobe` available on `PATH`.
-- The whisper.cpp Windows executable at `tools/whisper/Release/whisper-cli.exe` and a model at `tools/whisper/models/ggml-base.bin`.
-- A running 9Router instance and its API key. The default address is `http://localhost:20128/v1`.
+- For Windows runs, the whisper.cpp executable at `tools/whisper/Release/whisper-cli.exe` and a model at `tools/whisper/models/ggml-base.bin`.
+- A running 9Router instance and its API key. The default address is `http://192.168.1.19:5678/v1`.
 
 Whisper runs locally on the CPU. Transcription can take several minutes for a long video; the progress display reports pipeline stages, so it can remain on “Transcription” while Whisper is working. 9Router receives transcript text for clip selection, not video frames. Use only videos you own or have permission to process.
 
@@ -23,7 +23,7 @@ bun run check
 bun run start
 ```
 
-Open <http://127.0.0.1:3000>. The server binds to localhost by default. Upload a video up to 2 GB, wait for its job to finish, then select it under **Recent projects** to preview clips. Adjust a clip’s start/end or captions, then choose **Render changes**. Caption presets are Classic, Bold, and Clean; captions appear in the center safe area. The hook-title overlay is optional.
+Open <http://127.0.0.1:3000>. The server binds to localhost by default. Upload a video up to 2 GB, wait for its job to finish, then select it under **Recent projects** to preview clips. Adjust a clip’s start/end or captions, then choose **Render changes**. Caption presets are Classic, Bold, and Clean; layouts include center crop, blurred background, and stacked panels. The hook-title overlay is optional.
 
 To change the address, set `HOST` or `PORT` before running `bun run start`. Restart the server after updating code or configuration.
 
@@ -61,13 +61,28 @@ Job state is stored in `data/jobs.sqlite`. Jobs run through an in-process queue 
 - `LLM_MODEL`: defaults to `hermes-main`.
 - `WHISPER_MODEL`: defaults to `base`; `small` is also supported if installed.
 - `WHISPER_LANG`: defaults to `en`.
+- `WHISPER_BIN`: optional path to `whisper-cli`; defaults to the Windows tool path locally and `/usr/local/bin/whisper-cli` in Docker.
+- `WHISPER_MODELS_DIR`: optional model directory; defaults to the Windows tool model directory locally and `/models` in Docker.
+- `WHISPER_MODEL_PATH`: optional explicit model file path.
 - `FACE_MODEL_PATH`: optional custom path to the YuNet ONNX face model.
 
 The face model is only needed when face tracking is enabled. It is downloaded by `bun run download-face-model` and kept under `data/` by default.
 
+## Docker
+
+Install Docker Desktop with Compose, then run:
+
+```powershell
+Copy-Item .env.example .env
+# Set LLM_API_KEY in .env
+docker compose up --build
+```
+
+Open <http://127.0.0.1:3000>. On first start, Compose downloads the default `base` Whisper model (about 142 MiB) into `models/`; `data/` and `models/` persist on the host. Set `WHISPER_MODEL=small` to use a locally downloaded small model. The default container LLM URL is `http://192.168.1.19:5678/v1`; override `LLM_BASE_URL` in `.env` for another reachable 9Router address. `docker compose down` stops the app and keeps both directories.
+
 ## For contributors and coding agents
 
-- Read `AGENTS.md`, `docs/PROGRESS.md`, and `docs/DECISIONS.md` before changing the project. `AGENTS.md` is the source of truth for phase gates; stop at the current gate and wait for the user before starting the next phase.
+- Read `AGENTS.md`, `docs/PROGRESS.md`, and `docs/DECISIONS.md` before changing the project. `AGENTS.md` is the source of truth for phase gates.
 - Use Bun and strict TypeScript. Run `bun run check` before handing off changes. Tests use fakes for LLM calls; do not add live Whisper or 9Router calls to the normal check.
 - Keep the UI in `web/`, its serving adapter in `src/ui.ts`, API routes in `src/api.ts`, and pipeline work in `src/pipeline/`. Keep API behavior independent of the UI.
 - Preserve stage caches and the one-job queue. Keep Whisper and rendering local, use argument arrays for spawned tools, and do not add Python, CUDA, or ROCm dependencies.
