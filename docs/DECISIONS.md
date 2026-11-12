@@ -49,3 +49,4 @@ Format: `date | decision | reason`
 2026-11-11 | Container 9Router defaults to `http://192.168.1.19:5678/v1` and remains configurable through environment variables | Matches the configured phone endpoint while allowing other network setups.
 2026-11-12 | Docker stores SQLite in a named Linux volume, separate from the Windows bind-mounted media directory | Prevents SQLite WAL and locking from depending on Windows bind-mount file semantics while keeping uploads and renders host-visible.
 2026-11-12 | Use `http://192.168.1.13:20128/v1` as the current 9Router endpoint | The user corrected the earlier phone address; the models endpoint returned HTTP 200 from both Windows and Docker.
+2026-11-12 | Add English and Bahasa Indonesia as per-upload language choices | The choice is saved on each job so Whisper and candidate metadata use the same selected language without changing existing English defaults.

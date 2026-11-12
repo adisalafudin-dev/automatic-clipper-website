@@ -22,9 +22,12 @@ export type Transcript = {
   words: Word[];
 };
 
+export type ClipLanguage = "en" | "id";
+
 export type JobListItem = {
   id: string;
   filename: string;
+  language: ClipLanguage;
   status: "queued" | "running" | "completed" | "failed";
   stage: string;
   progress: number;

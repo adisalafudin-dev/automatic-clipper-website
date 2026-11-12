@@ -106,6 +106,19 @@ test("selects valid proposals through the JSON generator interface", async () =>
   expect(selected.every((candidate) => candidate.start >= 0 && candidate.end <= 400_000)).toBe(true);
   expect(capturedPrompt).toContain("fact-grounded");
   expect(capturedPrompt).toContain("private third-party crisis");
+  expect(capturedPrompt).toContain("same language as the transcript (en)");
+});
+
+test("requests Bahasa Indonesia clip metadata for Indonesian transcripts", async () => {
+  let capturedPrompt = "";
+  await selectCandidates({ ...transcript, language: "id" }, {
+    async generateJson(prompt) {
+      capturedPrompt = prompt;
+      return { candidates: sentences.map((sentence) => proposal(sentence.id)) };
+    },
+  });
+  expect(capturedPrompt).toContain("natural Bahasa Indonesia");
+  expect(capturedPrompt).toContain("every hook, title, and reason");
 });
 
 test("asks once for more options when a long chunk is underfilled", async () => {

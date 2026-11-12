@@ -18,6 +18,7 @@ Phase: 8 | Branch: phase-8-docker
 - `bun run check` covers the span math, FFmpeg concat args, and a real trimmed fixture.
 - Phase 8: Dockerfile builds CPU whisper.cpp; Compose runs API/UI/worker with FFmpeg and persistent media/model volumes plus a Linux SQLite volume.
 - Whisper binary and model paths are configurable; the default model downloads to the mounted models directory at first start.
+- Phase 8 follow-up: upload language can be English or Bahasa Indonesia; the choice is persisted per job, passed to Whisper, and used for hook/title/reason language.
 
 ## Next
 

@@ -23,7 +23,7 @@ bun run check
 bun run start
 ```
 
-Open <http://127.0.0.1:3000>. The server binds to localhost by default. Upload a video up to 2 GB, wait for its job to finish, then select it under **Recent projects** to preview clips. Adjust a clip’s start/end or captions, then choose **Render changes**. Caption presets are Classic, Bold, and Clean; layouts include center crop, blurred background, and stacked panels. The hook-title overlay is optional.
+Open <http://127.0.0.1:3000>. The server binds to localhost by default. Choose English or Bahasa Indonesia for each upload, then upload a video up to 2 GB. The selected language controls Whisper transcription and the language used for candidate hooks and titles. Select the job under **Recent projects** to preview clips. Adjust a clip’s start/end or captions, then choose **Render changes**. Caption presets are Classic, Bold, and Clean; layouts include center crop, blurred background, and stacked panels. The hook-title overlay is optional.
 
 To change the address, set `HOST` or `PORT` before running `bun run start`. Restart the server after updating code or configuration.
 
@@ -60,7 +60,7 @@ Job state is stored in `data/jobs.sqlite`. Jobs run through an in-process queue 
 - `LLM_API_KEY`: key from your 9Router dashboard; keep it private.
 - `LLM_MODEL`: defaults to `hermes-main`.
 - `WHISPER_MODEL`: defaults to `base`; `small` is also supported if installed.
-- `WHISPER_LANG`: defaults to `en`.
+- `WHISPER_LANG`: defaults to `en`; the upload selector supports English (`en`) and Bahasa Indonesia (`id`).
 - `WHISPER_BIN`: optional path to `whisper-cli`; defaults to the Windows tool path locally and `/usr/local/bin/whisper-cli` in Docker.
 - `WHISPER_MODELS_DIR`: optional model directory; defaults to the Windows tool model directory locally and `/models` in Docker.
 - `WHISPER_MODEL_PATH`: optional explicit model file path.

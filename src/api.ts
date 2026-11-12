@@ -5,8 +5,9 @@ import { JobQueue } from "./state/queue.ts";
 import { JobStore } from "./state/jobs.ts";
 import type { ClipCandidate } from "./pipeline/candidates.ts";
 import type { ClipRenderEdit } from "./pipeline/render.ts";
-import type { Transcript } from "./types.ts";
+import type { ClipLanguage, Transcript } from "./types.ts";
 import { transcriptSentences } from "./pipeline/sentences.ts";
+import { configuredClipLanguage, isClipLanguage } from "./languages.ts";
 
 const MAX_UPLOAD_BYTES = 2_000_000_000;
 
@@ -58,6 +59,7 @@ export function createJobApi(
         let videoPath: string;
         let force = false;
         let faceTracking = request.headers.get("x-face-tracking") === "true";
+        let languageInput: unknown = configuredClipLanguage(process.env.WHISPER_LANG);
         const contentType = request.headers.get("content-type") ?? "";
         let uploadName: string | undefined;
         let uploadBody: ReadableStream<Uint8Array> | null = null;
@@ -69,6 +71,7 @@ export function createJobApi(
             const entry = form.get("video");
             uploadFile = entry instanceof File ? entry : null;
             faceTracking = form.get("faceTracking") === "true";
+            languageInput = form.get("language") ?? languageInput;
           } catch {
             return json({ error: "Upload must be valid multipart form data" }, 400);
           }
@@ -84,6 +87,7 @@ export function createJobApi(
             return json({ error: "x-video-filename must be URL-encoded" }, 400);
           }
           if (!uploadName) return json({ error: "x-video-filename is required" }, 400);
+          languageInput = request.headers.get("x-language") ?? languageInput;
           uploadBody = request.body;
           if (!uploadBody) return json({ error: "Video upload body is empty" }, 400);
           const contentLength = Number(request.headers.get("content-length") ?? "0");
@@ -140,6 +144,7 @@ export function createJobApi(
           if (payload.faceTracking !== undefined && typeof payload.faceTracking !== "boolean") {
             return json({ error: "faceTracking must be a boolean" }, 400);
           }
+          languageInput = payload.language ?? languageInput;
           faceTracking = payload.faceTracking === true;
           videoPath = path.resolve(payload.videoPath.trim());
           force = payload.force === true;
@@ -148,9 +153,14 @@ export function createJobApi(
           }
         }
 
+        if (!isClipLanguage(languageInput)) {
+          return json({ error: "language must be 'en' or 'id'" }, 400);
+        }
+        const language: ClipLanguage = languageInput;
+
         const id = randomUUID();
-        const job = store.create(id, videoPath, faceTracking);
-        queue.enqueue({ id, videoPath, force, faceTracking });
+        const job = store.create(id, videoPath, faceTracking, language);
+        queue.enqueue({ id, videoPath, force, faceTracking, language });
         return json({ job }, 202, { location: `/jobs/${id}` });
       }
 

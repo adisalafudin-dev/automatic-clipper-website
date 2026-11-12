@@ -1,4 +1,4 @@
-import type { JobListItem, JobView, UiClipEdit, UiSentence } from "../src/types.ts";
+import type { ClipLanguage, JobListItem, JobView, UiClipEdit, UiSentence } from "../src/types.ts";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
@@ -18,10 +18,11 @@ export async function getJobs(): Promise<JobListItem[]> {
   return result.jobs;
 }
 
-export async function uploadVideo(file: File, faceTracking: boolean): Promise<JobView> {
+export async function uploadVideo(file: File, faceTracking: boolean, language: ClipLanguage): Promise<JobView> {
   const form = new FormData();
   form.set("video", file);
   form.set("faceTracking", String(faceTracking));
+  form.set("language", language);
   const result = await request<{ job: JobView }>("/jobs", { method: "POST", body: form });
   return result.job;
 }

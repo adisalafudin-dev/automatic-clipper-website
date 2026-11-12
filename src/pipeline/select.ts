@@ -18,6 +18,9 @@ export async function selectCandidates(
     const source = chunk.sentences
       .map((sentence) => `[${sentence.id}] ${sentence.text}`)
       .join("\n");
+    const outputLanguage = transcript.language.toLowerCase().startsWith("id")
+      ? "natural Bahasa Indonesia"
+      : `the same language as the transcript (${transcript.language})`;
     const prompt = [
       "Find self-contained short video clips with a strong opening, clear payoff, and no missing context.",
       "Return 30–90 second clip candidates. Choose boundaries from the supplied sentence IDs only.",
@@ -25,6 +28,7 @@ export async function selectCandidates(
       "Aim for at least five final non-overlapping clips by offering alternatives across the full chunk, not several versions of one moment.",
       "Exclude sponsor reads, ads, housekeeping, and disconnected introductions or outros.",
       "Use fact-grounded, concise titles and hooks supported by the selected sentences; do not invent quotes or add sensational claims.",
+      `Write every hook, title, and reason in ${outputLanguage}; keep the meaning faithful to the transcript.`,
       "Avoid exposing private third-party crisis, health, or financial details; prefer public-interest facts.",
       "Score each candidate from 0 to 10 for hook strength, accuracy, clarity, and shareability.",
       "Do not include timestamps. Return only JSON with a candidates array, no markdown fences.",

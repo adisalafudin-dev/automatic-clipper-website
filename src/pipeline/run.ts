@@ -24,7 +24,7 @@ export type PipelineResult = {
   candidateCount: number;
 };
 
-export type PipelineOptions = { faceTracking?: boolean };
+export type PipelineOptions = { faceTracking?: boolean; language?: string };
 
 export async function runPipeline(
   videoPath: string,
@@ -55,7 +55,7 @@ export async function runPipeline(
   });
 
   const transcript: Transcript = await timedStage("transcription", () =>
-    transcribe(wavPath, jobDir, force),
+    transcribe(wavPath, jobDir, force, options.language),
   );
 
   const candidatesPath = path.join(jobDir, "candidates.json");

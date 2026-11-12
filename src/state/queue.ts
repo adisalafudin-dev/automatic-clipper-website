@@ -20,6 +20,7 @@ type QueueItem = {
   force: boolean;
   operation?: "pipeline" | "render";
   faceTracking?: boolean;
+  language?: string;
   clipId?: string;
   onlyStale?: boolean;
 };
@@ -95,7 +96,10 @@ export class JobQueue {
           if (renderIds.length) await updateRenderStatus(jobDir, renderIds, "rendering");
           const result = item.operation === "render"
             ? await this.renderer(item.videoPath, jobDir, report, item.faceTracking === true, item.clipId, item.onlyStale)
-            : await this.pipeline(item.videoPath, jobDir, item.force, report, { faceTracking: item.faceTracking === true });
+            : await this.pipeline(item.videoPath, jobDir, item.force, report, {
+              faceTracking: item.faceTracking === true,
+              language: item.language,
+            });
           if (renderIds.length) await updateRenderStatus(jobDir, result.manifest.clips.map((clip) => clip.id), "done");
           if (item.clipId || item.onlyStale) {
             const current = this.store.get(item.id)?.result;

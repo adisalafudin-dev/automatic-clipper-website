@@ -23,9 +23,10 @@ export async function transcribe(
   audioPath: string,
   jobDir: string,
   force = false,
+  requestedLanguage = process.env.WHISPER_LANG ?? "en",
 ): Promise<Transcript> {
   const model = process.env.WHISPER_MODEL ?? "base";
-  const language = process.env.WHISPER_LANG ?? "en";
+  const language = requestedLanguage;
   const whisperBin = process.env.WHISPER_BIN ?? DEFAULT_WHISPER_BIN;
   const modelsDir = process.env.WHISPER_MODELS_DIR ?? DEFAULT_MODELS_DIR;
   const modelPath =
