@@ -117,7 +117,8 @@ Also in `docs/DECISIONS.md`. If they differ, `DECISIONS.md` wins and you tell me
 - **LLM:** all calls through 9Router.
 - **Runtime:** Bun + TypeScript strict. SQLite via `bun:sqlite` when state is needed. No Postgres or Redis.
 - **Rendering:** CPU `libx264` by default.
-- **Queue (UI phase):** in-process, one render at a time.
+- **Queue (UI phase):** in-process, one render at a time
+.
 
 ## 10. Machine and Windows rules
 
@@ -160,7 +161,78 @@ Rules:
 - One container for API + UI + worker. Keep render concurrency at 1.
 Exit check: `docker compose up` on a clean checkout processes a sample video end to end, the clips match a non-Docker run, `data/` persists across restarts, and the image contains no secrets.
 
-Do not start the next phase until I say "go".
+**Phase 9: Content modes (gaming streamer first)**
+
+Goal: one pipeline, several content modes. A mode is a `ModeProfile` object in
+`src/modes.ts` (decision: 2026-11-13, see DECISIONS.md). The pipeline reads the
+profile only and never branches on the mode name. Adding a mode = adding one
+object. Modes: `default` (= current behavior, must not change), `gaming`, `podcast`.
+
+Rules for this phase:
+- Do the steps in order. Each step: implement, add tests for the pure logic,
+  run all tests, update docs/PROGRESS.md, add one line to docs/DECISIONS.md for
+  any real decision, then commit. Continue to the next step without waiting.
+- Add a ModeProfile field only in the step that uses it.
+- `default` mode output must stay identical to before this phase.
+- If a decision has tradeoffs, pick the recommended option, record it in
+  DECISIONS.md, and continue. Stop and ask only if it would contradict an
+  existing DECISIONS.md entry or needs a new dependency.
+- Keep the Windows rules: Bun.spawn with arg arrays, path.join, FFmpeg run in
+  the job folder with short relative names for subtitle files.
+- Verify FFmpeg flags and API fields against docs or a real run. Do not guess.
+- If the Dockerfile needs new files (e.g. glossaries), update it in the same step.
+
+### Steps
+- 9.1 modes.ts: ModeProfile type (name, description), MODES, getMode, listModes.
+  (may already exist; check). Tests: default fallback, unknown name throws,
+  inherited names like "toString" rejected.
+- 9.2 CLI: `--mode <name>` flag (default: `default`). Validate with getMode, fail
+  with a clear message listing valid modes. Save `mode` in the job metadata and in
+  clips.json. Re-running from a later stage reuses the saved mode unless overridden.
+- 9.3 API + UI: `GET /modes` returns listModes(). Job creation accepts `mode`
+  (validated, stored per job in SQLite). In web/ add a "Mode" dropdown filled from
+  /modes. Re-render and retry use the job's stored mode.
+- 9.4 Split-screen layout (gaming): add `layout: "center-crop" | "split"` to the
+  profile. Split = facecam region on top, main content below, stacked into 1080x1920
+  (crop + scale + vstack in filter_complex). Facecam rectangle is configurable
+  (normalized x, y, w, h) via profile default and per-job override (CLI flag and
+  UI field). No auto-detection yet. Captions sit near the seam or lower third.
+  Tests: pure function that builds the filter graph string (snapshot-style).
+  Keep the FFmpeg command commented.
+- 9.5 Audio energy scoring: compute loudness per sentence window with FFmpeg,
+  cache to audio_energy.json in the job folder, normalize across the video
+  (percentile or z-score, document the choice). In Pass 2 combine:
+  final = (1 - w) * llmScore + w * energyScore(0-10), with `audioWeight` w in
+  the profile (gaming higher, podcast low, default 0 = unchanged behavior).
+  Tests: normalization, combination, weight 0 equals the LLM score.
+- 9.6 Transcript glossary: per-mode `glossaries/<mode>.json` mapping wrong -> right
+  (Indonesian slang, streamer and game names). Case-insensitive whole-word
+  replacement applied after transcription and before chunking/captions, keeping
+  word timestamps (a multi-word phrase maps onto its time span). Missing file = no-op.
+  Tests: single word, multi-word, case, no match.
+- 9.7 Metadata generator: per clip, one LLM call through generateJson with schema
+  {title, description, hashtags[]}, language Indonesian, input = that clip's
+  transcript only. Sequential calls, retry once on invalid JSON, then log and skip.
+  Write into clips.json. Log the model name returned. Tests: schema validation
+  and the retry/skip path with a fake LLM client.
+- 9.8 Caption presets: `captionPreset` in the profile selects ASS style presets
+  (font, size, colors, highlight color, position). Tests: preset -> ASS style
+  line builder.
+- 9.9 Hook title overlay: show the clip's hook/title for the first ~2-3 s, styled
+  by the preset. Tests: overlay timing and text escaping.
+- 9.10 Zoom punch-in (optional, experimental): slight zoom on emphasized words,
+  behind a profile flag, off by default. Measure render time on this CPU and
+  record it in DECISIONS.md. Drop it if the slowdown is large.
+- 9.11 Wrap-up: update README/AGENTS.md usage for modes, rebuild the Docker image,
+  run one end-to-end job per mode on a short fixture video.
+
+### Profile values to start with
+- gaming: layout split, audioWeight about 0.3, gaming glossary, bold caption preset
+- podcast: layout center-crop, audioWeight about 0.1, clean caption preset
+- default: current behavior, audioWeight 0
+Tune the numbers in Phase 4 style comparisons, not by guessing.
+
+
 
 ## 12. Legal
 
