@@ -1,17 +1,20 @@
 import path from "node:path";
 import { runPipeline } from "./pipeline/run.ts";
+import { parseCliArgs } from "./cli-options.ts";
 
 async function main() {
   console.log(`Clipper CLI starting on Bun ${Bun.version}`);
-  const args = Bun.argv.slice(2);
-  const force = args.includes("--force");
-  const faceTracking = args.includes("--face-track");
-  const videoPath = args.find((arg) => !arg.startsWith("--"));
-  if (!videoPath) throw new Error("Usage: bun run src/cli.ts <video-file> [--force] [--face-track]");
+  const options = parseCliArgs(Bun.argv.slice(2));
+  const videoPath = options.videoPath;
+  if (!videoPath) throw new Error("Usage: bun run src/cli.ts <video-file> [--force] [--face-track] [--mode <default|gaming|podcast>]");
 
   const jobId = path.parse(videoPath).name;
   const jobDir = path.join("data", "jobs", jobId);
-  const result = await runPipeline(videoPath, jobDir, force, undefined, { faceTracking });
+  const result = await runPipeline(videoPath, jobDir, options.force, undefined, {
+    faceTracking: options.faceTracking,
+    mode: options.mode,
+  });
+  console.log(`Mode: ${result.manifest.mode}`);
   console.log(`Transcript words: ${result.transcriptWords}`);
   console.log(`Candidates and rendered clips: ${result.candidateCount}`);
   console.log(`Manifest: ${path.join(jobDir, "clips.json")}`);

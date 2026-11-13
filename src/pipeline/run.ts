@@ -7,6 +7,8 @@ import { renderClips, type ClipsManifest } from "./render.ts";
 import { selectCandidates } from "./select.ts";
 import { transcribe } from "./transcribe.ts";
 import type { ClipCandidate } from "./candidates.ts";
+import type { ModeName } from "../modes.ts";
+import { readJobMetadata, resolveJobMode, saveJobMetadata } from "../job-metadata.ts";
 
 export const PIPELINE_STAGES = [
   "audio_extraction",
@@ -24,7 +26,7 @@ export type PipelineResult = {
   candidateCount: number;
 };
 
-export type PipelineOptions = { faceTracking?: boolean; language?: string };
+export type PipelineOptions = { faceTracking?: boolean; language?: string; mode?: ModeName };
 
 export async function runPipeline(
   videoPath: string,
@@ -35,6 +37,9 @@ export async function runPipeline(
 ): Promise<PipelineResult> {
   const startedAt = performance.now();
   await checkFfmpeg();
+  const metadata = await readJobMetadata(jobDir);
+  const mode = resolveJobMode(options.mode, metadata.mode);
+  await saveJobMetadata(jobDir, { ...metadata, mode });
 
   const timedStage = async <T>(stageName: PipelineStage, work: () => Promise<T>): Promise<T> => {
     const start = performance.now();
@@ -69,9 +74,11 @@ export async function runPipeline(
     return selected;
   });
 
-  const manifest = await timedStage("rendering", () =>
+  const renderedManifest = await timedStage("rendering", () =>
     renderClips(videoPath, jobDir, transcript, candidates, force, {}, options.faceTracking === true),
   );
+  const manifest: ClipsManifest = { ...renderedManifest, mode };
+  await Bun.write(path.join(jobDir, "clips.json"), JSON.stringify(manifest, null, 2));
   console.log(`Total: ${((performance.now() - startedAt) / 1000).toFixed(2)}s`);
   return { manifest, transcriptWords: transcript.words.length, candidateCount: candidates.length };
 }

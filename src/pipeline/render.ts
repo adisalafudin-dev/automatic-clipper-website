@@ -5,6 +5,7 @@ import type { ClipCandidate } from "./candidates.ts";
 import { applyCaptionWordEdits, buildAss, type CaptionStyle } from "./captions.ts";
 import { keepSpans, outputOffsetMs, spanDuration, wordsOnOutputTimeline, type SourceSpan } from "./pauses.ts";
 import { sampleFaceCenters, type FaceCenterSample } from "../vision/faces.ts";
+import type { ModeName } from "../modes.ts";
 
 export type LayoutPreset = "crop" | "blurred" | "stacked";
 export type RenderStatus = "none" | "queued" | "rendering" | "done" | "failed";
@@ -25,7 +26,7 @@ export type RenderedClip = {
   reason: string;
 };
 
-export type ClipsManifest = { source: string; clips: RenderedClip[] };
+export type ClipsManifest = { source: string; clips: RenderedClip[]; mode?: ModeName };
 
 function slashPath(filePath: string): string {
   return filePath.replaceAll(path.sep, "/");

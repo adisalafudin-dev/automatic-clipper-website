@@ -51,3 +51,4 @@ Format: `date | decision | reason`
 2026-11-12 | Use `http://192.168.1.13:20128/v1` as the current 9Router endpoint | The user corrected the earlier phone address; the models endpoint returned HTTP 200 from both Windows and Docker.
 2026-11-12 | Add English and Bahasa Indonesia as per-upload language choices | The choice is saved on each job so Whisper and candidate metadata use the same selected language without changing existing English defaults.
 2026-11-13 | Phase 9.1 defines immutable `default`, `gaming`, and `podcast` profiles; missing mode resolves to `default`, invalid modes throw | Centralizes the supported names and preserves current behavior as the compatibility default.
+2026-11-13 | CLI mode precedence is explicit `--mode`, saved `job.json` mode, then `default` | Reruns reuse the original profile by default while allowing an intentional override.

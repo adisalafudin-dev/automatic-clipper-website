@@ -20,10 +20,11 @@ Phase: 9 | Branch: phase-9-content-modes
 - Whisper binary and model paths are configurable; the default model downloads to the mounted models directory at first start.
 - Phase 8 follow-up: upload language can be English or Bahasa Indonesia; the choice is persisted per job, passed to Whisper, and used for hook/title/reason language.
 - Phase 9.1: added immutable default, gaming, and podcast profiles with default lookup, ordered listing, and explicit invalid-name errors.
+- Phase 9.2: added `--mode`, persisted the selected mode in `job.json` and `clips.json`, and reused the saved mode unless explicitly overridden.
 
 ## Next
 
-- Phase 9.2: add the CLI mode flag, persist mode in job metadata and clips.json, and reuse saved mode on later-stage reruns.
+- Phase 9.3: expose modes through the API and upload UI, persist them in SQLite, and reuse the saved mode for rerender/retry.
 
 ## Known bugs / open questions
 
