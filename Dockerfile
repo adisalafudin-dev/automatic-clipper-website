@@ -19,6 +19,7 @@ COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile --production
 COPY src ./src
 COPY web ./web
+COPY glossaries ./glossaries
 COPY tsconfig.json ./tsconfig.json
 COPY --from=whisper-build /build/whisper.cpp/build/bin/whisper-cli /usr/local/bin/whisper-cli
 COPY --from=whisper-build /build/whisper.cpp/build/bin/lib*.so* /usr/local/lib/

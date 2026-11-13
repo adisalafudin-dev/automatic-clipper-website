@@ -12,6 +12,7 @@ import { getMode, type FacecamRect } from "../modes.ts";
 import { readJobMetadata, resolveJobMode, saveJobMetadata } from "../job-metadata.ts";
 import { loadOrComputeAudioEnergy } from "./audio-energy.ts";
 import { transcriptSentences } from "./sentences.ts";
+import { applyModeGlossary } from "./glossary.ts";
 
 export const PIPELINE_STAGES = [
   "audio_extraction",
@@ -62,9 +63,16 @@ export async function runPipeline(
     }
   });
 
-  const transcript: Transcript = await timedStage("transcription", () =>
+  const rawTranscript: Transcript = await timedStage("transcription", () =>
     transcribe(wavPath, jobDir, force, options.language),
   );
+  const transcript: Transcript = {
+    ...rawTranscript,
+    words: await applyModeGlossary(rawTranscript.words, mode),
+  };
+  if (transcript.words !== rawTranscript.words) {
+    await Bun.write(path.join(jobDir, "transcript.json"), JSON.stringify(transcript, null, 2));
+  }
 
   const candidatesPath = path.join(jobDir, "candidates.json");
   const profile = getMode(mode);
