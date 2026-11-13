@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import type { Transcript, Word } from "../types.ts";
 import type { ClipCandidate } from "./candidates.ts";
@@ -10,7 +10,7 @@ import type { FacecamRect } from "../modes.ts";
 import type { ClipMetadata } from "./clip-metadata.ts";
 
 export type LayoutPreset = "crop" | "blurred" | "stacked" | "split";
-export type RenderStatus = "none" | "queued" | "rendering" | "done" | "failed";
+export type RenderStatus = "none" | "queued" | "rendering" | "done" | "failed" | "cancelled";
 export type ClipRenderEdit = { startMs?: number; endMs?: number; caption?: string; captionWords?: Array<{ wordIndex: number; text: string }>; style?: CaptionStyle; titleOverlay?: boolean; layout?: LayoutPreset; origStartMs?: number; origEndMs?: number; renderStatus?: RenderStatus; renderError?: string; renderedAt?: string };
 
 export type RenderedClip = {
@@ -155,10 +155,15 @@ function spreadCaptionWords(caption: string, duration: number): Word[] {
   });
 }
 
-async function runFfmpeg(args: string[], cwd: string): Promise<void> {
-  const proc = Bun.spawn(args, { cwd, stdout: "ignore", stderr: "pipe" });
+async function runFfmpeg(args: string[], cwd: string, signal?: AbortSignal): Promise<void> {
+  const proc = Bun.spawn(args, { cwd, stdout: "ignore", stderr: "pipe", signal });
   const stderr = await new Response(proc.stderr).text();
   const code = await proc.exited;
+  if (signal?.aborted) {
+    const output = args.at(-1);
+    if (output) await rm(path.join(cwd, output), { force: true });
+    throw new Error("Render cancelled");
+  }
   if (code !== 0) throw new Error(`ffmpeg render failed (exit code ${code}):\n${stderr.trim()}`);
 }
 
@@ -173,6 +178,7 @@ export async function renderClips(
   modeLayout: "center-crop" | "split" = "center-crop",
   facecamRect?: FacecamRect,
   captionPreset: CaptionStyle = "classic",
+  signal?: AbortSignal,
 ): Promise<ClipsManifest> {
   const absoluteJobDir = path.resolve(jobDir);
   const absoluteVideo = path.resolve(videoPath);
@@ -183,6 +189,7 @@ export async function renderClips(
 
   const clips: RenderedClip[] = [];
   for (const [index, candidate] of candidates.entries()) {
+    if (signal?.aborted) throw new Error("Render cancelled");
     const id = candidate.id ?? `clip-${String(index + 1).padStart(2, "0")}`;
     const filename = `${id}.mp4`;
     const captionsFilename = `${id}.ass`;
@@ -204,7 +211,7 @@ export async function renderClips(
     if (faceTracking) {
       const trackingStarted = performance.now();
       try {
-        faceCenters = await sampleFaceCenters(absoluteVideo, renderStart, renderEnd);
+        faceCenters = await sampleFaceCenters(absoluteVideo, renderStart, renderEnd, undefined, signal);
         if (multiple) {
           faceCenters = faceCenters.flatMap((sample) => {
             const offset = outputOffsetMs(renderStart + sample.time * 1000, pauses);
@@ -247,13 +254,14 @@ export async function renderClips(
         facecamRect,
       );
       try {
-        await runFfmpeg(args, absoluteJobDir);
+        await runFfmpeg(args, absoluteJobDir, signal);
       } catch (error) {
-        if (!faceTracking || !faceCenters.length) throw error;
+        if (signal?.aborted || !faceTracking || !faceCenters.length) throw error;
         console.warn(`Tracked crop render failed for ${id}; retrying center crop: ${error instanceof Error ? error.message : String(error)}`);
         await runFfmpeg(
           buildRenderArgs(absoluteVideo, outputRelative, captionsRelative, renderStart, renderEnd, [], multiple ? pauses : [], edit?.layout ?? (modeLayout === "split" ? "split" : "crop"), facecamRect),
           absoluteJobDir,
+          signal,
         );
       }
     }

@@ -8,18 +8,34 @@ type CompletionResponse = {
   error?: { message?: string };
 };
 
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+function wait(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(new Error("9Router request cancelled")); return; }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      reject(new Error("9Router request cancelled"));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
 
 export class RouterClient implements JsonGenerator {
   private readonly baseUrl: string;
   private readonly apiKey: string;
   private readonly model: string;
+  private readonly signal?: AbortSignal;
   readonly responseModels = new Set<string>();
 
-  constructor(env: Record<string, string | undefined> = process.env) {
+  constructor(env: Record<string, string | undefined> = process.env, signal?: AbortSignal) {
     this.baseUrl = (env.LLM_BASE_URL ?? "http://localhost:20128/v1").replace(/\/$/, "");
     this.apiKey = env.LLM_API_KEY ?? "";
     this.model = env.LLM_MODEL ?? "hermes-main";
+    this.signal = signal;
     if (!this.apiKey) throw new Error("LLM_API_KEY is required; set it in .env or the environment");
   }
 
@@ -45,13 +61,14 @@ export class RouterClient implements JsonGenerator {
             authorization: `Bearer ${this.apiKey}`,
           },
           body: JSON.stringify(body),
+          signal: this.signal,
         });
       } catch (error) {
         throw new Error(`9Router request failed: ${error instanceof Error ? error.message : String(error)}`);
       }
 
       if (response.status === 429 && attempt < 3) {
-        await wait(500 * 2 ** attempt);
+        await wait(500 * 2 ** attempt, this.signal);
         continue;
       }
       const payload = (await response.json().catch(() => ({}))) as CompletionResponse;

@@ -1,10 +1,11 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 
 // Extracts the audio track of a video as 16 kHz mono 16-bit WAV.
 export async function extractAudio(
   videoPath: string,
   wavPath: string,
+  signal?: AbortSignal,
 ): Promise<void> {
   if (!(await Bun.file(videoPath).exists())) {
     throw new Error(`Video not found: ${videoPath}`);
@@ -31,9 +32,13 @@ export async function extractAudio(
     wavPath,
   ];
 
-  const proc = Bun.spawn(args, { stdout: "ignore", stderr: "pipe" });
+  const proc = Bun.spawn(args, { stdout: "ignore", stderr: "pipe", signal });
   const stderr = await new Response(proc.stderr).text();
   const exitCode = await proc.exited;
+  if (signal?.aborted) {
+    await rm(wavPath, { force: true });
+    throw new Error("Audio extraction cancelled");
+  }
 
   if (exitCode !== 0) {
     throw new Error(`ffmpeg failed (exit code ${exitCode}):\n${stderr.trim()}`);

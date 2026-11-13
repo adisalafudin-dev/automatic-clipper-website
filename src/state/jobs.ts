@@ -5,8 +5,8 @@ import type { ClipLanguage } from "../types.ts";
 import type { ModeName } from "../modes.ts";
 import type { FacecamRect } from "../modes.ts";
 
-export type JobStatus = "queued" | "running" | "completed" | "failed";
-export type StageStatus = "pending" | "running" | "completed" | "failed";
+export type JobStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+export type StageStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
 
 export type JobStage = {
   status: StageStatus;
@@ -85,7 +85,7 @@ export class JobStore {
         language TEXT NOT NULL DEFAULT 'en',
         mode TEXT NOT NULL DEFAULT 'default',
         facecam_rect TEXT,
-        status TEXT NOT NULL CHECK (status IN ('queued','running','completed','failed')),
+        status TEXT NOT NULL CHECK (status IN ('queued','running','completed','failed','cancelled')),
         stage TEXT NOT NULL,
         progress INTEGER NOT NULL DEFAULT 0,
         stages_json TEXT NOT NULL,
@@ -108,6 +108,36 @@ export class JobStore {
     }
     if (!columns.some((column) => column.name === "facecam_rect")) {
       db.exec("ALTER TABLE jobs ADD COLUMN facecam_rect TEXT");
+    }
+    const schema = db.query("SELECT sql FROM sqlite_master WHERE type='table' AND name='jobs'").get() as { sql: string };
+    if (!schema.sql.includes("'cancelled'")) {
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        db.exec("ALTER TABLE jobs RENAME TO jobs_before_cancellation");
+        db.exec(`CREATE TABLE jobs (
+          id TEXT PRIMARY KEY,
+          video_path TEXT NOT NULL,
+          face_tracking INTEGER NOT NULL DEFAULT 0,
+          language TEXT NOT NULL DEFAULT 'en',
+          mode TEXT NOT NULL DEFAULT 'default',
+          facecam_rect TEXT,
+          status TEXT NOT NULL CHECK (status IN ('queued','running','completed','failed','cancelled')),
+          stage TEXT NOT NULL,
+          progress INTEGER NOT NULL DEFAULT 0,
+          stages_json TEXT NOT NULL,
+          error TEXT,
+          result_json TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )`);
+        db.exec(`INSERT INTO jobs SELECT id, video_path, face_tracking, language, mode, facecam_rect, status, stage, progress, stages_json, error, result_json, created_at, updated_at FROM jobs_before_cancellation`);
+        db.exec("DROP TABLE jobs_before_cancellation");
+        db.exec("CREATE INDEX IF NOT EXISTS jobs_created_at_idx ON jobs(created_at DESC)");
+        db.exec("COMMIT");
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
     }
   }
 
@@ -189,6 +219,17 @@ export class JobStore {
     this.update(id, `
       UPDATE jobs SET status='failed', stage=?, stages_json=?, error=?, updated_at=? WHERE id=?
     `, [stage ?? job.stage, JSON.stringify(stages), error, new Date().toISOString(), id]);
+  }
+
+  cancel(id: string): void {
+    const job = this.get(id);
+    if (!job || job.status === "completed" || job.status === "failed" || job.status === "cancelled") return;
+    const stages = job.stages;
+    const active = PIPELINE_STAGES.find((stage) => stages[stage].status === "running");
+    if (active) stages[active] = { ...stages[active], status: "cancelled" };
+    this.update(id, `
+      UPDATE jobs SET status='cancelled', stage='cancelled', stages_json=?, error='Cancelled by user', updated_at=? WHERE id=?
+    `, [JSON.stringify(stages), new Date().toISOString(), id]);
   }
 
   private update(id: string, sql: string, values: SQLQueryBindings[]): void {

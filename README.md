@@ -23,7 +23,7 @@ bun run check
 bun run start
 ```
 
-Open <http://127.0.0.1:3000>. The server binds to localhost by default. Choose English or Bahasa Indonesia and a content mode for each upload, then upload a video up to 2 GB. Gaming mode stacks a configurable facecam crop above the gameplay; set the normalized `x,y,w,h` rectangle in the upload form. Its glossary in `glossaries/gaming.json` corrects configured transcript terms while keeping their timing. The selected language and mode are saved with the job and manifest. Available modes are Default, Gaming, and Podcast. Select the job under **Recent projects** to preview clips. Adjust a clip’s start/end or captions, then choose **Render changes**. Caption presets are Classic, Bold, and Clean; layouts include center crop, blurred background, and stacked panels. The hook-title overlay is optional.
+Open <http://127.0.0.1:3000>. The server binds to localhost by default. Choose English or Bahasa Indonesia and a content mode for each upload, then upload a video up to 2 GB. Cancel a queued or running job from its row under **Recent projects**. Gaming mode stacks a configurable facecam crop above the gameplay; set the normalized `x,y,w,h` rectangle in the upload form. Its glossary in `glossaries/gaming.json` corrects configured transcript terms while keeping their timing. The selected language and mode are saved with the job and manifest. Available modes are Default, Gaming, and Podcast. Select the job under **Recent projects** to preview clips. Adjust a clip’s start/end or captions, then choose **Render changes**. Caption presets are Classic, Bold, and Clean; layouts include center crop, blurred background, and stacked panels. The hook-title overlay is optional.
 
 Default retains center crop, Classic captions, and LLM-only ranking. Gaming uses the split facecam layout, Bold captions, glossary corrections, and a 0.3 audio-energy ranking weight. Podcast uses center crop, Clean captions, and a 0.1 audio-energy weight. Audio energy combines normalized FFmpeg RMS loudness (bounded by the 10th and 90th percentiles) with the model score.
 
@@ -46,6 +46,7 @@ The API and static UI share the local server, but API handlers live separately i
 | --- | --- |
 | `GET /health` | Check server readiness |
 | `POST /jobs` | Upload a video or submit a local `videoPath` |
+| `POST /jobs/:id/cancel` | Cancel a queued or running job and stop its active subprocess |
 | `GET /jobs` | List recent jobs |
 | `GET /jobs/:id` | Read job state, per-stage progress, and the clip manifest |
 | `GET /jobs/:id/clips/:clipId` | Preview a rendered clip |

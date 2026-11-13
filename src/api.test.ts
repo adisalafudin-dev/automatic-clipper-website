@@ -93,6 +93,59 @@ test("HTTP API accepts jobs, exposes persisted stage progress, and returns resul
   }
 });
 
+test("cancel endpoint stops the active job and removes a queued job", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "clipper-cancel-"));
+  const activeVideo = path.join(temp, "active.mp4");
+  const queuedVideo = path.join(temp, "queued.mp4");
+  await Bun.write(activeVideo, "fixture");
+  await Bun.write(queuedVideo, "fixture");
+  const db = new Database(":memory:");
+  const store = new JobStore(db);
+  const calls: string[] = [];
+  let activeSignal: AbortSignal | undefined;
+  let started!: () => void;
+  const pipelineStarted = new Promise<void>((resolve) => { started = resolve; });
+  const queue = new JobQueue(store, async (videoPath, _jobDir, _force, _report, options) => {
+    calls.push(videoPath);
+    activeSignal = options.signal;
+    const child = Bun.spawn([process.execPath, "-e", "await Bun.sleep(30000)"], {
+      stdout: "ignore", stderr: "ignore", signal: options.signal,
+    });
+    started();
+    await child.exited;
+    if (options.signal?.aborted) throw new Error("child process stopped on cancellation");
+    return fixtureResult();
+  });
+  const app = createJobApi(store, queue);
+  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: app.fetch });
+  const baseUrl = `http://127.0.0.1:${server.port}`;
+  try {
+    const create = (videoPath: string) => fetch(`${baseUrl}/jobs`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ videoPath }),
+    });
+    const activeResponse = await create(activeVideo);
+    const { job: active } = await activeResponse.json() as { job: { id: string } };
+    await pipelineStarted;
+    const queuedResponse = await create(queuedVideo);
+    const { job: queued } = await queuedResponse.json() as { job: { id: string; status: string } };
+    expect(queued.status).toBe("queued");
+
+    const cancelQueued = await fetch(`${baseUrl}/jobs/${queued.id}/cancel`, { method: "POST" });
+    expect(cancelQueued.status).toBe(200);
+    expect((await cancelQueued.json() as { job: { status: string } }).job.status).toBe("cancelled");
+    const cancelActive = await fetch(`${baseUrl}/jobs/${active.id}/cancel`, { method: "POST" });
+    expect(cancelActive.status).toBe(200);
+    expect(activeSignal?.aborted).toBe(true);
+    await waitForStatus(baseUrl, active.id, "cancelled");
+    expect(calls).toEqual([activeVideo]);
+    expect((await fetch(`${baseUrl}/jobs/${active.id}/cancel`, { method: "POST" })).status).toBe(409);
+  } finally {
+    server.stop?.();
+    db.close();
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
 test("transcript endpoint stays available while transcription has not produced a file", async () => {
   const temp = await mkdtemp(path.join(os.tmpdir(), "clipper-pending-transcript-"));
   const sourcePath = path.join(temp, "source.mp4");

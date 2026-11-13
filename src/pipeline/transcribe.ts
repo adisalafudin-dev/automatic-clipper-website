@@ -1,4 +1,5 @@
 import path from "node:path";
+import { rm } from "node:fs/promises";
 import type { Transcript, WhisperSegment } from "../types.ts";
 import { wordsFromSegments } from "./words.ts";
 
@@ -24,6 +25,7 @@ export async function transcribe(
   jobDir: string,
   force = false,
   requestedLanguage = process.env.WHISPER_LANG ?? "en",
+  signal?: AbortSignal,
 ): Promise<Transcript> {
   const model = process.env.WHISPER_MODEL ?? "base";
   const language = requestedLanguage;
@@ -69,9 +71,13 @@ export async function transcribe(
   ];
 
   // whisper prints a lot to stderr, so we capture it and show it only on failure.
-  const proc = Bun.spawn(args, { stdout: "ignore", stderr: "pipe" });
+  const proc = Bun.spawn(args, { stdout: "ignore", stderr: "pipe", signal });
   const stderr = await new Response(proc.stderr).text();
   const exitCode = await proc.exited;
+  if (signal?.aborted) {
+    await rm(`${outPrefix}.json`, { force: true });
+    throw new Error("Transcription cancelled");
+  }
   if (exitCode !== 0) {
     throw new Error(
       `whisper-cli failed (exit code ${exitCode}):\n${stderr.trim()}`,

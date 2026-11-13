@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent, type MouseEvent } from "react";
 import type { ClipLanguage, JobListItem } from "../src/types.ts";
 import type { ModeName, ModeProfile } from "../src/modes.ts";
-import { getJob, getJobs, getModes, uploadVideo } from "./api.ts";
+import { cancelJob, getJob, getJobs, getModes, uploadVideo } from "./api.ts";
 import { JobEditor } from "./JobEditor.tsx";
 
 export function App() {
@@ -62,6 +62,16 @@ export function App() {
     }
   }
 
+  async function stopJob(event: MouseEvent<HTMLButtonElement>, jobId: string) {
+    event.stopPropagation();
+    try {
+      await cancelJob(jobId);
+      await refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  }
+
   return <main className="shell">
     <header className="topbar"><a className="brand" href="/">cutroom<span>.</span></a><span className="local-tag">LOCAL WORKSPACE</span></header>
     <section className="hero"><p className="eyebrow">VIDEO CLIPPER</p><h1>Make the moments<br /><em>worth sharing.</em></h1><p>Turn long videos into short, captioned clips on your computer.</p></section>
@@ -76,7 +86,7 @@ export function App() {
       </form>
       <div className="section-title"><div><p className="eyebrow">YOUR WORKSPACE</p><h2>Recent projects</h2></div><button className="button quiet" onClick={() => void refresh()}>Refresh</button></div>
       {error && <p className="error" role="alert">{error}</p>}
-      {loading ? <p className="muted">Loading projects…</p> : jobs.length === 0 ? <p className="muted">No projects yet. Upload a video to get started.</p> : <ul className="job-list">{jobs.map((job) => <li className={`job-row ${selectedId === job.id ? "selected" : ""}`} key={job.id} onClick={() => { setSelectedId(job.id); void getJob(job.id).then(setSelectedJob).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason))); }}><div className="job-info"><strong>{job.filename}</strong><span className="muted">{job.stage} · {job.progress}% · {job.language === "id" ? "Bahasa Indonesia" : "English"} · {job.mode}</span><div className="progress-track"><div className="progress-fill" style={{ width: `${job.progress}%` }} /></div>{job.error && <span className="error">{job.error}</span>}</div><span className={`badge ${job.status}`}>{job.status}</span></li>)}</ul>}
+      {loading ? <p className="muted">Loading projects…</p> : jobs.length === 0 ? <p className="muted">No projects yet. Upload a video to get started.</p> : <ul className="job-list">{jobs.map((job) => <li className={`job-row ${selectedId === job.id ? "selected" : ""}`} key={job.id} onClick={() => { setSelectedId(job.id); void getJob(job.id).then(setSelectedJob).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason))); }}><div className="job-info"><strong>{job.filename}</strong><span className="muted">{job.stage} · {job.progress}% · {job.language === "id" ? "Bahasa Indonesia" : "English"} · {job.mode}</span><div className="progress-track"><div className="progress-fill" style={{ width: `${job.progress}%` }} /></div>{job.error && <span className="error">{job.error}</span>}</div><div className="job-actions"><span className={`badge ${job.status}`}>{job.status}</span>{(job.status === "queued" || job.status === "running") && <button className="button danger" type="button" onClick={(event) => void stopJob(event, job.id)}>Cancel</button>}</div></li>)}</ul>}
       {selectedJob && <JobEditor detail={selectedJob} onEditSaved={refresh} />}
     </section>
     <footer>Videos stay on this computer · CPU rendering</footer>

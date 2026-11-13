@@ -118,6 +118,7 @@ export async function sampleFaceCenters(
   clipStart: number,
   clipEnd: number,
   dimensions?: VideoDimensions,
+  signal?: AbortSignal,
 ): Promise<FaceCenterSample[]> {
   const video = dimensions ?? await probeDimensions(videoPath);
   const proc = Bun.spawn([
@@ -125,7 +126,7 @@ export async function sampleFaceCenters(
     "-t", ((clipEnd - clipStart) / 1000).toFixed(3), "-i", videoPath,
     "-vf", `fps=1/${SAMPLE_SECONDS},scale=${INPUT_SIZE}:${INPUT_SIZE}:force_original_aspect_ratio=decrease,pad=${INPUT_SIZE}:${INPUT_SIZE}:(ow-iw)/2:(oh-ih)/2,format=rgb24`,
     "-pix_fmt", "rgb24", "-f", "rawvideo", "pipe:1",
-  ], { stdout: "pipe", stderr: "pipe" });
+  ], { stdout: "pipe", stderr: "pipe", signal });
   const [buffer, stderr, code] = await Promise.all([
     new Response(proc.stdout).arrayBuffer(), new Response(proc.stderr).text(), proc.exited,
   ]);
@@ -135,6 +136,7 @@ export async function sampleFaceCenters(
   if (bytes.length % frameBytes !== 0) throw new Error("FFmpeg returned an incomplete face sample frame");
   const samples: FaceCenterSample[] = [];
   for (let offset = 0, index = 0; offset < bytes.length; offset += frameBytes, index++) {
+    if (signal?.aborted) throw new Error("Face tracking cancelled");
     const centerX = await findBestFace(bytes.subarray(offset, offset + frameBytes), video);
     if (centerX !== null) samples.push({ time: index * SAMPLE_SECONDS, centerX });
   }

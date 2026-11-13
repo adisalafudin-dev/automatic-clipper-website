@@ -51,6 +51,7 @@ export async function loadOrComputeAudioEnergy(
   wavPath: string,
   cachePath: string,
   sentences: Sentence[],
+  signal?: AbortSignal,
 ): Promise<SentenceEnergy[]> {
   try {
     const cached = JSON.parse(await readFile(cachePath, "utf8")) as SentenceEnergy[];
@@ -63,7 +64,7 @@ export async function loadOrComputeAudioEnergy(
     "ffmpeg", "-hide_banner", "-loglevel", "error", "-i", wavPath,
     "-af", "astats=metadata=1:reset=1,ametadata=print:key=lavfi.astats.Overall.RMS_level:file=-",
     "-f", "null", "-",
-  ], { stdout: "ignore", stderr: "pipe" });
+  ], { stdout: "ignore", stderr: "pipe", signal });
   const stderr = await new Response(proc.stderr).text();
   const code = await proc.exited;
   if (code !== 0) throw new Error(`FFmpeg audio energy analysis failed (exit code ${code}): ${stderr.trim()}`);

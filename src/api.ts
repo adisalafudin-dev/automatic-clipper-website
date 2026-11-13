@@ -201,6 +201,19 @@ export function createJobApi(
         })) });
       }
 
+      const cancelMatch = url.pathname.match(/^\/jobs\/([^/]+)\/cancel$/);
+      if (cancelMatch && request.method === "POST") {
+        let jobId: string;
+        try { jobId = decodeURIComponent(cancelMatch[1]!); }
+        catch { return json({ error: "Invalid job ID" }, 400); }
+        const job = store.get(jobId);
+        if (!job) return json({ error: "Job not found" }, 404);
+        if (job.status !== "queued" && job.status !== "running") return json({ error: `Cannot cancel a ${job.status} job` }, 409);
+        if (!(await queue.cancel(jobId))) return json({ error: "Job is no longer queued or running" }, 409);
+        store.cancel(jobId);
+        return json({ job: store.get(jobId) });
+      }
+
       const jobMatch = url.pathname.match(/^\/jobs\/([^/]+)$/);
       if (jobMatch && request.method === "GET") {
         let id: string;

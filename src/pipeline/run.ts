@@ -31,7 +31,11 @@ export type PipelineResult = {
   candidateCount: number;
 };
 
-export type PipelineOptions = { faceTracking?: boolean; language?: string; mode?: ModeName; facecamRect?: FacecamRect };
+export type PipelineOptions = { faceTracking?: boolean; language?: string; mode?: ModeName; facecamRect?: FacecamRect; signal?: AbortSignal };
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new Error("Job cancelled");
+}
 
 export async function runPipeline(
   videoPath: string,
@@ -47,9 +51,11 @@ export async function runPipeline(
   await saveJobMetadata(jobDir, { ...metadata, mode });
 
   const timedStage = async <T>(stageName: PipelineStage, work: () => Promise<T>): Promise<T> => {
+    throwIfAborted(options.signal);
     const start = performance.now();
     reportProgress(stageName, 0);
     const result = await work();
+    throwIfAborted(options.signal);
     reportProgress(stageName, 100);
     console.log(`${stageName}: ${((performance.now() - start) / 1000).toFixed(2)}s`);
     return result;
@@ -58,14 +64,14 @@ export async function runPipeline(
   const wavPath = path.join(jobDir, "audio", "audio.wav");
   await timedStage("audio_extraction", async () => {
     if (force || !(await Bun.file(wavPath).exists())) {
-      await extractAudio(videoPath, wavPath);
+      await extractAudio(videoPath, wavPath, options.signal);
     } else {
       console.log(`Using cached audio: ${wavPath}`);
     }
   });
 
   const rawTranscript: Transcript = await timedStage("transcription", () =>
-    transcribe(wavPath, jobDir, force, options.language),
+    transcribe(wavPath, jobDir, force, options.language, options.signal),
   );
   const transcript: Transcript = {
     ...rawTranscript,
@@ -83,11 +89,11 @@ export async function runPipeline(
       return (await Bun.file(candidatesPath).json()) as ClipCandidate[];
     }
     const energy = profile.audioWeight > 0
-      ? await loadOrComputeAudioEnergy(wavPath, path.join(jobDir, "audio_energy.json"), transcriptSentences(transcript))
+      ? await loadOrComputeAudioEnergy(wavPath, path.join(jobDir, "audio_energy.json"), transcriptSentences(transcript), options.signal)
       : [];
     const selected = await selectCandidates(
       transcript,
-      new RouterClient(),
+      new RouterClient(process.env, options.signal),
       new Map(energy.map((item) => [item.sentenceId, item.score])),
       profile.audioWeight,
     );
@@ -107,12 +113,12 @@ export async function runPipeline(
   }));
   const missingMetadata = identifiedCandidates.filter((candidate) => !metadataById.has(candidate.id!));
   if (missingMetadata.length) {
-    const generated = await generateClipMetadata(transcript, missingMetadata, new RouterClient());
+    const generated = await generateClipMetadata(transcript, missingMetadata, new RouterClient(process.env, options.signal));
     for (const [id, metadata] of generated) metadataById.set(id, metadata);
   }
 
   const renderedManifest = await timedStage("rendering", () =>
-    renderClips(videoPath, jobDir, transcript, identifiedCandidates, force, {}, options.faceTracking === true, profile.layout, options.facecamRect ?? profile.facecamRect, profile.captionPreset),
+    renderClips(videoPath, jobDir, transcript, identifiedCandidates, force, {}, options.faceTracking === true, profile.layout, options.facecamRect ?? profile.facecamRect, profile.captionPreset, options.signal),
   );
   const manifest: ClipsManifest = {
     ...renderedManifest,

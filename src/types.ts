@@ -32,7 +32,7 @@ export type JobListItem = {
   language: ClipLanguage;
   mode: ModeName;
   facecamRect: FacecamRect | null;
-  status: "queued" | "running" | "completed" | "failed";
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
   stage: string;
   progress: number;
   error: string | null;
@@ -61,7 +61,7 @@ export type UiClipEdit = {
   style?: "classic" | "bold" | "clean";
   titleOverlay?: boolean;
   layout?: "crop" | "blurred" | "stacked";
-  renderStatus?: "none" | "queued" | "rendering" | "done" | "failed";
+  renderStatus?: "none" | "queued" | "rendering" | "done" | "failed" | "cancelled";
   renderError?: string;
   renderedAt?: string;
 };

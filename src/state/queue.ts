@@ -28,9 +28,9 @@ type QueueItem = {
   onlyStale?: boolean;
 };
 
-type RenderRunner = (videoPath: string, jobDir: string, report: PipelineProgress, faceTracking: boolean, clipId?: string, onlyStale?: boolean, mode?: ModeName, facecamRect?: FacecamRect | null) => Promise<PipelineResult>;
+type RenderRunner = (videoPath: string, jobDir: string, report: PipelineProgress, faceTracking: boolean, clipId?: string, onlyStale?: boolean, mode?: ModeName, facecamRect?: FacecamRect | null, signal?: AbortSignal) => Promise<PipelineResult>;
 
-async function renderExisting(videoPath: string, jobDir: string, report: PipelineProgress, faceTracking: boolean, clipId?: string, onlyStale = false, mode: ModeName = "default", facecamRect?: FacecamRect | null): Promise<PipelineResult> {
+async function renderExisting(videoPath: string, jobDir: string, report: PipelineProgress, faceTracking: boolean, clipId?: string, onlyStale = false, mode: ModeName = "default", facecamRect?: FacecamRect | null, signal?: AbortSignal): Promise<PipelineResult> {
   report("rendering", 0);
   const transcript = JSON.parse(await readFile(path.join(jobDir, "transcript.json"), "utf8")) as Transcript;
   const storedCandidates = JSON.parse(await readFile(path.join(jobDir, "candidates.json"), "utf8")) as ClipCandidate[];
@@ -55,7 +55,7 @@ async function renderExisting(videoPath: string, jobDir: string, report: Pipelin
       const id = candidate.id!;
       const edit = edits[id];
       const outputExists = await Bun.file(path.join(jobDir, "clips", `${id}.mp4`)).exists();
-      if (["none", "queued", "rendering", "failed"].includes(edit?.renderStatus ?? "") || !outputExists) selected.push(candidate);
+      if (["none", "queued", "rendering", "failed", "cancelled"].includes(edit?.renderStatus ?? "") || !outputExists) selected.push(candidate);
     }
   }
   if (clipId && !selected.length) throw new Error(`Clip ${clipId} is missing its candidate data`);
@@ -66,7 +66,7 @@ async function renderExisting(videoPath: string, jobDir: string, report: Pipelin
   } catch (error) {
     if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
   }
-  const renderedManifest = await renderClips(videoPath, jobDir, transcript, selected, true, edits, faceTracking, profile.layout, facecamRect ?? profile.facecamRect, profile.captionPreset);
+  const renderedManifest = await renderClips(videoPath, jobDir, transcript, selected, true, edits, faceTracking, profile.layout, facecamRect ?? profile.facecamRect, profile.captionPreset, signal);
   const oldMetadata = new Map(previousManifest?.clips.flatMap((clip) => clip.metadata ? [[clip.id, clip.metadata] as const] : []) ?? []);
   const manifest = {
     ...renderedManifest,
@@ -80,6 +80,9 @@ async function renderExisting(videoPath: string, jobDir: string, report: Pipelin
 
 export class JobQueue {
   private readonly pending: QueueItem[] = [];
+  private readonly active = new Map<string, AbortController>();
+  private readonly activeDone = new Map<string, Promise<void>>();
+  private readonly resolveActive = new Map<string, () => void>();
   private draining = false;
 
   constructor(
@@ -94,6 +97,23 @@ export class JobQueue {
     void this.drain();
   }
 
+  async cancel(id: string): Promise<boolean> {
+    let found = false;
+    for (let index = this.pending.length - 1; index >= 0; index--) {
+      if (this.pending[index]!.id === id) {
+        this.pending.splice(index, 1);
+        found = true;
+      }
+    }
+    const controller = this.active.get(id);
+    if (controller) {
+      controller.abort(new Error("Cancelled by user"));
+      found = true;
+      await this.activeDone.get(id);
+    }
+    return found;
+  }
+
   private async drain(): Promise<void> {
     if (this.draining) return;
     this.draining = true;
@@ -101,6 +121,9 @@ export class JobQueue {
       while (this.pending.length) {
         const item = this.pending.shift()!;
         const jobDir = path.join(this.jobRoot, item.id);
+        const controller = new AbortController();
+        this.active.set(item.id, controller);
+        this.activeDone.set(item.id, new Promise<void>((resolve) => this.resolveActive.set(item.id, resolve)));
         this.store.markRunning(item.id);
         let activeRenderIds: string[] = [];
         try {
@@ -122,6 +145,7 @@ export class JobQueue {
               item.onlyStale,
               item.mode,
               item.facecamRect,
+              controller.signal,
             );
             const manifest = { ...rendered.manifest, mode: item.mode ?? "default" };
             await Bun.write(path.join(jobDir, "clips.json"), JSON.stringify(manifest, null, 2));
@@ -132,9 +156,12 @@ export class JobQueue {
               language: item.language,
               mode: item.mode,
               facecamRect: item.facecamRect ?? undefined,
+              signal: controller.signal,
             });
           }
+          if (controller.signal.aborted) throw new Error("Job cancelled");
           if (renderIds.length) await updateRenderStatus(jobDir, result.manifest.clips.map((clip) => clip.id), "done");
+          if (controller.signal.aborted) throw new Error("Job cancelled");
           if (item.clipId || item.onlyStale) {
             const current = this.store.get(item.id)?.result;
             if (!current || (item.clipId && !result.manifest.clips[0])) throw new Error(`Clip ${item.clipId ?? "stale"} render result could not be merged`);
@@ -145,10 +172,20 @@ export class JobQueue {
             this.store.complete(item.id, manifest);
           } else this.store.complete(item.id, result.manifest);
         } catch (error) {
-          if (item.operation === "render") {
+          if (controller.signal.aborted) {
+            this.store.cancel(item.id);
+            if (activeRenderIds.length) await updateRenderStatus(jobDir, activeRenderIds, "cancelled");
+          } else if (item.operation === "render") {
             if (activeRenderIds.length) await updateRenderStatus(jobDir, activeRenderIds, "failed", error instanceof Error ? error.message : String(error));
+            this.store.fail(item.id, error instanceof Error ? error.message : String(error));
+          } else {
+            this.store.fail(item.id, error instanceof Error ? error.message : String(error));
           }
-          this.store.fail(item.id, error instanceof Error ? error.message : String(error));
+        } finally {
+          this.active.delete(item.id);
+          this.activeDone.delete(item.id);
+          this.resolveActive.get(item.id)?.();
+          this.resolveActive.delete(item.id);
         }
       }
     } finally {
@@ -168,12 +205,12 @@ async function staleIds(jobDir: string, onlyStale: boolean): Promise<string[]> {
   for (const [index, candidate] of candidates.entries()) {
     const id = candidate.id ?? `clip-${String(index + 1).padStart(2, "0")}`;
     const exists = await Bun.file(path.join(jobDir, "clips", `${id}.mp4`)).exists();
-    if (["none", "queued", "rendering", "failed"].includes(edits[id]?.renderStatus ?? "") || !exists) stale.push(id);
+    if (["none", "queued", "rendering", "failed", "cancelled"].includes(edits[id]?.renderStatus ?? "") || !exists) stale.push(id);
   }
   return stale;
 }
 
-async function updateRenderStatus(jobDir: string, ids: string[], renderStatus: "rendering" | "done" | "failed", renderError?: string): Promise<void> {
+async function updateRenderStatus(jobDir: string, ids: string[], renderStatus: "rendering" | "done" | "failed" | "cancelled", renderError?: string): Promise<void> {
   let edits: Record<string, ClipRenderEdit> = {};
   try { edits = JSON.parse(await readFile(path.join(jobDir, "edits.json"), "utf8")) as Record<string, ClipRenderEdit>; }
   catch (error) { if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error; }
