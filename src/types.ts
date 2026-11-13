@@ -46,6 +46,7 @@ export type JobView = JobListItem & {
   result: { source: string; clips: Array<{
     id: string; file: string; captions: string; start: number; end: number; duration: number;
     startSentenceId: number; endSentenceId: number; title: string; hook: string; score: number; reason: string;
+    metadata?: { title: string; description: string; hashtags: string[] };
   }> } | null;
   updatedAt: string;
 };

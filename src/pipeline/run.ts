@@ -13,6 +13,7 @@ import { readJobMetadata, resolveJobMode, saveJobMetadata } from "../job-metadat
 import { loadOrComputeAudioEnergy } from "./audio-energy.ts";
 import { transcriptSentences } from "./sentences.ts";
 import { applyModeGlossary } from "./glossary.ts";
+import { generateClipMetadata, type ClipMetadata } from "./clip-metadata.ts";
 
 export const PIPELINE_STAGES = [
   "audio_extraction",
@@ -94,10 +95,30 @@ export async function runPipeline(
     return selected;
   });
 
+  const metadataById = new Map<string, ClipMetadata>();
+  const metadataPath = path.join(jobDir, "clips.json");
+  if (!force && await Bun.file(metadataPath).exists()) {
+    const previous = await Bun.file(metadataPath).json() as ClipsManifest;
+    for (const clip of previous.clips) if (clip.metadata) metadataById.set(clip.id, clip.metadata);
+  }
+  const identifiedCandidates = candidates.map((candidate, index) => ({
+    ...candidate,
+    id: candidate.id ?? `clip-${String(index + 1).padStart(2, "0")}`,
+  }));
+  const missingMetadata = identifiedCandidates.filter((candidate) => !metadataById.has(candidate.id!));
+  if (missingMetadata.length) {
+    const generated = await generateClipMetadata(transcript, missingMetadata, new RouterClient());
+    for (const [id, metadata] of generated) metadataById.set(id, metadata);
+  }
+
   const renderedManifest = await timedStage("rendering", () =>
-    renderClips(videoPath, jobDir, transcript, candidates, force, {}, options.faceTracking === true, getMode(mode).layout, options.facecamRect ?? getMode(mode).facecamRect),
+    renderClips(videoPath, jobDir, transcript, identifiedCandidates, force, {}, options.faceTracking === true, getMode(mode).layout, options.facecamRect ?? getMode(mode).facecamRect),
   );
-  const manifest: ClipsManifest = { ...renderedManifest, mode };
+  const manifest: ClipsManifest = {
+    ...renderedManifest,
+    mode,
+    clips: renderedManifest.clips.map((clip) => ({ ...clip, ...(metadataById.has(clip.id) ? { metadata: metadataById.get(clip.id)! } : {}) })),
+  };
   await Bun.write(path.join(jobDir, "clips.json"), JSON.stringify(manifest, null, 2));
   console.log(`Total: ${((performance.now() - startedAt) / 1000).toFixed(2)}s`);
   return { manifest, transcriptWords: transcript.words.length, candidateCount: candidates.length };

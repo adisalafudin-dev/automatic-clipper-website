@@ -1,7 +1,7 @@
 import path from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
 import { runPipeline, type PipelineOptions, type PipelineProgress, type PipelineResult } from "../pipeline/run.ts";
-import { renderClips, type ClipRenderEdit } from "../pipeline/render.ts";
+import { renderClips, type ClipRenderEdit, type ClipsManifest } from "../pipeline/render.ts";
 import type { Transcript } from "../types.ts";
 import type { ClipCandidate } from "../pipeline/candidates.ts";
 import { JobStore } from "./jobs.ts";
@@ -60,8 +60,19 @@ async function renderExisting(videoPath: string, jobDir: string, report: Pipelin
   }
   if (clipId && !selected.length) throw new Error(`Clip ${clipId} is missing its candidate data`);
   const profile = getMode(mode);
+  let previousManifest: ClipsManifest | undefined;
+  try {
+    previousManifest = JSON.parse(await readFile(path.join(jobDir, "clips.json"), "utf8")) as ClipsManifest;
+  } catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+  }
   const renderedManifest = await renderClips(videoPath, jobDir, transcript, selected, true, edits, faceTracking, profile.layout, facecamRect ?? profile.facecamRect);
-  const manifest = { ...renderedManifest, mode };
+  const oldMetadata = new Map(previousManifest?.clips.flatMap((clip) => clip.metadata ? [[clip.id, clip.metadata] as const] : []) ?? []);
+  const manifest = {
+    ...renderedManifest,
+    mode,
+    clips: renderedManifest.clips.map((clip) => ({ ...clip, ...(oldMetadata.has(clip.id) ? { metadata: oldMetadata.get(clip.id)! } : {}) })),
+  };
   await Bun.write(path.join(jobDir, "clips.json"), JSON.stringify(manifest, null, 2));
   report("rendering", 100);
   return { manifest, transcriptWords: transcript.words.length, candidateCount: candidates.length };

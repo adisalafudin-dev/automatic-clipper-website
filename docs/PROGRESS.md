@@ -25,10 +25,11 @@ Phase: 9 | Branch: phase-9-content-modes
 - Phase 9.4: added gaming split-screen rendering with normalized facecam crop override in CLI/UI and persisted per-job settings.
 - Phase 9.5: cached per-sentence FFmpeg RMS energy, normalized it with 10th/90th percentile bounds, and blended profile weights into Pass 2 scores.
 - Phase 9.6: applied case-insensitive, whole-word mode glossaries after transcription and before chunking/rendering, preserving phrase time spans.
+- Phase 9.7: generated and validated per-clip Indonesian title, description, and hashtags through the JSON generator, with one retry and cached manifest metadata.
 
 ## Next
 
-- Phase 9.7: add per-clip metadata generation with schema validation and retry/skip behavior.
+- Phase 9.8: select ASS caption styles from the content mode profile.
 
 ## Known bugs / open questions
 

@@ -7,6 +7,7 @@ import { keepSpans, outputOffsetMs, spanDuration, wordsOnOutputTimeline, type So
 import { sampleFaceCenters, type FaceCenterSample } from "../vision/faces.ts";
 import type { ModeName } from "../modes.ts";
 import type { FacecamRect } from "../modes.ts";
+import type { ClipMetadata } from "./clip-metadata.ts";
 
 export type LayoutPreset = "crop" | "blurred" | "stacked" | "split";
 export type RenderStatus = "none" | "queued" | "rendering" | "done" | "failed";
@@ -25,6 +26,7 @@ export type RenderedClip = {
   hook: string;
   score: number;
   reason: string;
+  metadata?: ClipMetadata;
 };
 
 export type ClipsManifest = { source: string; clips: RenderedClip[]; mode?: ModeName };
