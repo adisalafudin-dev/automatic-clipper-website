@@ -59,3 +59,4 @@ Format: `date | decision | reason`
 2026-11-13 | Store generated per-clip Indonesian social metadata under `metadata` in `clips.json` and reuse it on reruns and preserve it through rerenders | Keeps the existing title/hook fields stable and avoids repeated model calls for completed clips.
 2026-11-13 | Use the existing Classic, Bold, and Clean ASS definitions as the default, gaming, and podcast profile presets | Reuses tested caption styling and keeps the default rendering appearance unchanged.
 2026-11-13 | Render an enabled hook/title overlay for 2.5 seconds and style it from the selected ASS preset | Gives viewers the clip context at the opening while keeping the existing opt-in behavior.
+2026-11-13 | Drop experimental word-emphasis zoom after the short CPU fixture render rose from 0.35s to 0.55s (+55%) | The slowdown was large for a sub-second clip, so the optional effect is not worth adding to the render path.

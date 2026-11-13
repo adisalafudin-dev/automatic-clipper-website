@@ -28,10 +28,11 @@ Phase: 9 | Branch: phase-9-content-modes
 - Phase 9.7: generated and validated per-clip Indonesian title, description, and hashtags through the JSON generator, with one retry and cached manifest metadata.
 - Phase 9.8: selected ASS font, color, highlight, outline, and position styling from each mode's caption preset.
 - Phase 9.9: made the optional hook/title overlay appear for the opening 2.5 seconds with preset-specific styling and ASS escaping.
+- Phase 9.10: measured experimental zoom on the CPU and dropped it after a 55% slowdown on a matched short fixture.
 
 ## Next
 
-- Phase 9.10: add optional experimental word-emphasis zoom and measure CPU render overhead.
+- Phase 9.11: document mode usage, rebuild Docker, and run a short end-to-end job per mode.
 
 ## Known bugs / open questions
 
