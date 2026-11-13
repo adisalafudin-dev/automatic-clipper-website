@@ -1,25 +1,22 @@
 # Progress
 
-Phase: PHASE FIX | Branch: phase-9-content-modes
+Phase: TRANSCRIPTION FIX | Branch: main
 
 ## Done
 
-- Upload keeps automatic clipping and language detection, with optional content mode and face tracking controls.
-- Gaming now crops the bottom-right facecam by default, accepts a custom crop, and tracks faces within that window while excluding the camera overlay from gameplay.
-- Missing face-tracking model now reports an actionable error; YuNet is installed in the local Docker volume.
-- Re-rendered both clips of the user's Gaming project; project is completed and both clip files were refreshed.
-- No-speech and no-valid-candidate outcomes fail clearly; empty projects can retry selection with cached transcript.
-- Docker startup is healthy; phase 7–9 editing, layouts, content modes, cancellation, and named projects remain available.
+- Phase FIX restored automatic clip generation, language detection, and clear failure states.
+- Gaming split layout and face tracking were corrected; local project clips were rerendered and Docker is healthy.
+- Added a transcription-fix plan to AGENTS.md; implementation is next.
 - `bun run check`: 77 tests pass, 294 assertions.
 
 ## Next
 
-- Improve Indonesian recognition only with reviewable caption edits or an explicitly chosen larger Whisper model; `base` still mishears some words.
+- Inspect Whisper hallucinations during silence, evaluate VAD, add pure-logic tests, and rerun a problematic transcript.
 
 ## Known bugs / open questions
 
-- Indonesian Whisper `base` output contains occasional word errors; this fix changes framing, not recognition quality.
-- Real 30–60 minute Whisper/9Router processing remains unverified. The staged `whisper.cpp` gitlink is user data and excluded from project commits.
+- Whisper `base` can repeat hallucinated phrases during silence; VAD mitigation is not implemented yet.
+- The local whisper.cpp checkout and `.vscode/` files are untracked local data and excluded from commits.
 
 ## Run
 

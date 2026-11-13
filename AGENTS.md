@@ -226,6 +226,27 @@ Rules for this phase:
 - 9.11 Wrap-up: update README/AGENTS.md usage for modes, rebuild the Docker image,
   run one end-to-end job per mode on a short fixture video.
 
+
+**PHASE FIX — Upload video, otomatis dapat clip**
+Tujuan: cukup unggah video 30 menit–1 jam. Setelah diproses, clip otomatis muncul tanpa perlu memilih kandidat atau menekan Render all stale.
+
+Rencana yang diusulkan:
+1. Sederhanakan alur upload: pilih video, unggah, lihat progres.
+2. Jalankan transkripsi, pencarian momen, dan render clip secara otomatis sampai selesai.
+3. Tampilkan clip yang jadi beserta preview dan tombol unduh.
+4. Deteksi bahasa video otomatis agar tidak perlu memilih Bahasa Indonesia atau English.
+5. Jika proses gagal atau tidak menemukan clip, tampilkan penyebabnya dengan jelas di proyek.
+6. Pertahankan Render all stale sebagai tombol opsional untuk merender ulang clip yang sudah ada.
+
+Plan: TRANSCRIPTION FIX
+1. Pastikan sumber pengulangan dengan membandingkan transcript dan audio pada bagian yang mengulang, lalu cek apakah Whisper menandainya sebagai ucapan atau bagian hening.
+2. Tambahkan perlindungan terhadap halusinasi saat hening: evaluasi opsi VAD yang tersedia di whisper-cli dan gunakan konfigurasi yang sesuai. Jangan menghapus kata hanya karena berulang—bisa saja memang diucapkan.
+3. Buat tes untuk logika murni, termasuk memastikan segmen kosong atau tidak valid tidak masuk ke transcript dan timestamp tetap benar.
+4. Uji ulang transkripsi pada proyek yang bermasalah dan periksa hasilnya. Jika perlu mengunduh model tambahan, ukurannya dan cara pemasangannya ditentukan sebelum dipakai.
+5. Catat perubahan di PROGRESS.md dan DECISIONS.md, jalankan bun run check, lalu commit perubahan.
+Model Whisper small menjadi opsi lanjutan jika VAD saja belum cukup; model itu lebih lambat di CPU, jadi tidak langsung dijadikan default.
+
+
 ### Current profile values and use
 - CLI: `bun run src/cli.ts video.mp4 --mode gaming --facecam-rect 0.68,0.04,0.28,0.28`.
 - The UI loads Default, Gaming, and Podcast from `GET /modes`; saved jobs reuse their mode for rerenders.
