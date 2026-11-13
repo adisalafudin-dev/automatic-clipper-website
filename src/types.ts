@@ -24,7 +24,7 @@ export type Transcript = {
   words: Word[];
 };
 
-export type ClipLanguage = "en" | "id";
+export type ClipLanguage = "auto" | "en" | "id";
 
 export type JobListItem = {
   id: string;

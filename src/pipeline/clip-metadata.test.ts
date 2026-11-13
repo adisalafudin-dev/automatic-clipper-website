@@ -33,9 +33,20 @@ test("generates metadata sequentially from only the clip transcript", async () =
   const result = await generateClipMetadata(transcript, candidates, fake);
   expect(prompts).toHaveLength(1);
   expect(prompts[0]).toContain("Clip-only text.");
-  expect(prompts[0]).toContain("Bahasa Indonesia");
+  expect(prompts[0]).toContain("same language as the transcript (en)");
   expect(prompts[0]).not.toContain("private");
   expect(result.get("clip-01")?.hashtags).toEqual(["video"]);
+});
+
+test("writes Indonesian metadata for an Indonesian transcript", async () => {
+  let prompt = "";
+  await generateClipMetadata({ ...transcript, language: "id" }, candidates, {
+    async generateJson(value) {
+      prompt = value;
+      return { title: "Judul", description: "Deskripsi", hashtags: [] };
+    },
+  });
+  expect(prompt).toContain("natural Bahasa Indonesia");
 });
 
 test("retries invalid JSON/schema once then skips that clip", async () => {

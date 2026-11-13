@@ -7,7 +7,7 @@ import type { ClipCandidate } from "./pipeline/candidates.ts";
 import type { ClipRenderEdit } from "./pipeline/render.ts";
 import type { ClipLanguage, Transcript } from "./types.ts";
 import { transcriptSentences } from "./pipeline/sentences.ts";
-import { configuredClipLanguage, isClipLanguage } from "./languages.ts";
+import { isClipLanguage } from "./languages.ts";
 import { getMode, listModes, parseFacecamRect, type FacecamRect, type ModeName } from "./modes.ts";
 import { defaultProjectName, normalizeProjectName } from "./project-name.ts";
 
@@ -61,11 +61,29 @@ export function createJobApi(
         return json(listModes());
       }
 
+      const retryMatch = url.pathname.match(/^\/jobs\/([^/]+)\/retry$/);
+      if (retryMatch && request.method === "POST") {
+        let jobId: string;
+        try { jobId = decodeURIComponent(retryMatch[1]!); }
+        catch { return json({ error: "Invalid job ID" }, 400); }
+        const job = store.get(jobId);
+        if (!job) return json({ error: "Job not found" }, 404);
+        if (job.status === "queued" || job.status === "running") return json({ error: "Job is already processing" }, 409);
+        if ((job.result?.clips.length ?? 0) > 0) return json({ error: "This project already has clips" }, 409);
+        if (!(await Bun.file(job.videoPath).exists())) return json({ error: "Original video file not found" }, 404);
+        store.requeue(jobId);
+        queue.enqueue({
+          id: job.id, videoPath: job.videoPath, force: false, reselect: true,
+          faceTracking: job.faceTracking, language: job.language, mode: job.mode, facecamRect: job.facecamRect,
+        });
+        return json({ job: store.get(jobId) }, 202);
+      }
+
       if (url.pathname === "/jobs" && request.method === "POST") {
         let videoPath: string;
         let force = false;
         let faceTracking = request.headers.get("x-face-tracking") === "true";
-        let languageInput: unknown = configuredClipLanguage(process.env.WHISPER_LANG);
+        let languageInput: unknown = "auto";
         let modeInput: unknown;
         let facecamRectInput: unknown;
         let displayNameInput: unknown;

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { JobView, UiClipEdit, UiSentence } from "../src/types.ts";
-import { createClip, getTranscript, removeClip, renderClip, renderStale, saveClipEdit } from "./api.ts";
+import { createClip, getTranscript, removeClip, renderClip, renderStale, retryJob, saveClipEdit } from "./api.ts";
 import { clampRange, durationWarning, formatTime, parseTime, sentenceSelectionRange, snapRangeToWords, type TimeRange } from "./lib/trim.ts";
 
 type JobDetail = { job: JobView; edits: Record<string, UiClipEdit> };
@@ -176,14 +176,14 @@ export function JobEditor({ detail, onEditSaved }: Props) {
   };
 
   return <section className="editor-shell" aria-label="Job editor">
-    <header className="editor-heading"><div><span className="eyebrow">JOB EDITOR</span><h2>{job.filename}</h2></div><div className="editor-actions"><button className="button" disabled={job.status === "running" || job.status === "queued"} onClick={() => void renderStale(job.id).then(onEditSaved).catch((reason: unknown) => setLoadError(reason instanceof Error ? reason.message : String(reason)))}>Render all stale</button><span className={`badge ${job.status}`}>{job.status}</span></div></header>
+    <header className="editor-heading"><div><span className="eyebrow">JOB EDITOR</span><h2>{job.filename}</h2></div><div className="editor-actions">{clips.length > 0 && <button className="button" disabled={job.status === "running" || job.status === "queued"} onClick={() => void renderStale(job.id).then(onEditSaved).catch((reason: unknown) => setLoadError(reason instanceof Error ? reason.message : String(reason)))}>Render all stale</button>}{clips.length === 0 && (job.status === "failed" || job.status === "completed") && <button className="button" onClick={() => void retryJob(job.id).then(onEditSaved).catch((reason: unknown) => setLoadError(reason instanceof Error ? reason.message : String(reason)))}>Retry clip generation</button>}<span className={`badge ${job.status}`}>{job.status}</span></div></header>
     {loadError && <p className="error" role="alert">{loadError}</p>}
     {job.status !== "completed" && <div className="editor-progress"><span>{job.error ? `Failed: ${job.error}` : `${job.stage} · ${job.progress}%`}</span><div className="progress-track"><div className="progress-fill" style={{ width: `${job.progress}%` }} /></div></div>}
     <div className="editor-grid">
       <aside className="editor-column clip-column"><h3>Clips <span>{clips.length}</span></h3>{clips.length ? clips.map((clip) => {
         const status = detail.edits[clip.id]?.renderStatus ?? "done";
         return <button className={`clip-choice ${selected?.id === clip.id ? "active" : ""}`} key={clip.id} onClick={() => setSelectedId(clip.id)}><strong>{clip.title}</strong><span>{clock(clip.duration)} · score {clip.score}/10</span><span className={`badge ${status}`}>{status}</span></button>;
-      }) : <p className="muted">No clips yet.</p>}</aside>
+      }) : <p className={job.status === "failed" ? "error" : "muted"}>{job.status === "failed" ? `Clip generation failed: ${job.error ?? "unknown error"}` : job.status === "completed" ? "No clips were created. Retry clip generation to reuse the transcript and try selection again." : "Clips will appear here automatically when processing finishes."}</p>}</aside>
       <section className="editor-column preview-column" aria-label="Source preview">
         {selected ? <>
           <div className="preview-frame"><video ref={videoRef} src={videoUrl} controls preload="metadata" onTimeUpdate={(event) => {

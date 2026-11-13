@@ -32,7 +32,7 @@ export async function generateClipMetadata(
       .trim();
     const prompt = [
       "Create concise social media metadata for this short video clip.",
-      "Write the title and description in natural Bahasa Indonesia. Use only facts from the clip transcript.",
+      `Write the title and description in ${transcript.language.toLowerCase().startsWith("id") ? "natural Bahasa Indonesia" : `the same language as the transcript (${transcript.language})`}. Use only facts from the clip transcript.`,
       "Return a short title, one or two sentence description, and 3-6 relevant hashtags without the # prefix.",
       "The input below contains only this clip's transcript.",
       clipTranscript,

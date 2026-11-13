@@ -69,8 +69,9 @@ test("HTTP API accepts jobs, exposes persisted stage progress, and returns resul
       body: JSON.stringify({ videoPath: input }),
     });
     expect(created.status).toBe(202);
-    const { job: queued } = await created.json() as { job: { id: string; status: string; filename: string } };
+    const { job: queued } = await created.json() as { job: { id: string; status: string; filename: string; language: string } };
     expect(queued.filename).toBe("video");
+    expect(queued.language).toBe("auto");
     expect(queued.id).toMatch(/^[0-9a-f-]{36}$/i);
     expect(["queued", "running", "completed"]).toContain(queued.status);
 
@@ -161,6 +162,33 @@ test("transcript endpoint stays available while transcription has not produced a
     const response = await fetch(`http://127.0.0.1:${server.port}/jobs/${job.id}/transcript`);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ sentences: [] });
+  } finally {
+    server.stop(true);
+    db.close();
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("retrying a zero-clip project reruns selection", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "clipper-retry-selection-"));
+  const sourcePath = path.join(temp, "source.mp4");
+  await Bun.write(sourcePath, "fixture");
+  const db = new Database(":memory:");
+  const store = new JobStore(db);
+  const previous = store.create("empty-result", sourcePath);
+  store.complete(previous.id, fixtureResult().manifest);
+  let reselected = false;
+  const queue = new JobQueue(store, async (_video, _dir, _force, _report, options) => {
+    reselected = options.reselect === true;
+    return fixtureResult();
+  });
+  const app = createJobApi(store, queue, { jobRoot: path.join(temp, "jobs") });
+  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: app.fetch });
+  try {
+    const response = await fetch(`http://127.0.0.1:${server.port}/jobs/${previous.id}/retry`, { method: "POST" });
+    expect(response.status).toBe(202);
+    await waitForStatus(`http://127.0.0.1:${server.port}`, previous.id, "completed");
+    expect(reselected).toBe(true);
   } finally {
     server.stop(true);
     db.close();

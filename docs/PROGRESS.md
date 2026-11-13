@@ -1,24 +1,23 @@
 # Progress
 
-Phase: 9 | Branch: phase-9-content-modes
+Phase: PHASE FIX | Branch: phase-9-content-modes
 
 ## Done
 
-- Phase 7 polish, caption/layout presets, title overlays, face tracking, and pause trimming are complete.
-- UI-spec Phase 6 API and browser editor features are complete.
-- Phase 8 Docker setup is complete; English and Bahasa Indonesia upload options are supported.
-- Phase 9.1–9.11 complete: Default/Gaming/Podcast profiles, split layout, energy scoring, glossaries, metadata, caption presets, and Docker mode e2e.
-- Experimental zoom was dropped after a measured 55% slowdown on a short CPU fixture.
-- Follow-up: UI/API cancellation stops active jobs; uploaded videos have editable names prefilled from the filename.
-- `bun run check` covers unit and FFmpeg integration tests; the three-mode fixture allows 15s for slower CPUs.
+- Upload uses automatic Whisper language detection and the Default mode without manual clip selection.
+- No-speech and no-valid-candidate outcomes fail with a clear reason instead of completing with zero clips.
+- Empty-result projects can retry selection using cached audio and transcript; stale rendering appears only when clips exist.
+- Clip metadata follows the language detected in the transcript.
+- Phase 7–9 editing, layouts, content modes, cancellation, and editable project names remain available.
+- `bun run check` covers unit tests and short FFmpeg end-to-end/integration fixtures.
 
 ## Next
 
-- Phase 9 gate complete; wait for approval before Phase 10.
+- Restart the app and retry existing empty projects; verify a 30-minute Indonesian upload when available.
 
 ## Known bugs / open questions
 
-- Live Whisper/9Router and full Docker pipeline e2e remain unverified without a sample video and configured model/key; Docker SQLite uses its named volume and face tracking depends on visibility.
+- Real 30–60 minute Whisper/9Router processing remains unverified without the user's source video, configured model, and 9Router key.
 - The staged `whisper.cpp` gitlink is user data and excluded from project commits.
 
 ## Run

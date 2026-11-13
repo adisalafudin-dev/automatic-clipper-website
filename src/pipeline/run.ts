@@ -31,7 +31,7 @@ export type PipelineResult = {
   candidateCount: number;
 };
 
-export type PipelineOptions = { faceTracking?: boolean; language?: string; mode?: ModeName; facecamRect?: FacecamRect; signal?: AbortSignal };
+export type PipelineOptions = { faceTracking?: boolean; language?: string; mode?: ModeName; facecamRect?: FacecamRect; reselect?: boolean; signal?: AbortSignal };
 
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new Error("Job cancelled");
@@ -46,6 +46,9 @@ export async function runPipeline(
 ): Promise<PipelineResult> {
   const startedAt = performance.now();
   await checkFfmpeg();
+  const candidatesPath = path.join(jobDir, "candidates.json");
+  const needsSelection = force || options.reselect === true || !(await Bun.file(candidatesPath).exists());
+  let llm = needsSelection ? new RouterClient(process.env, options.signal) : undefined;
   const metadata = await readJobMetadata(jobDir);
   const mode = resolveJobMode(options.mode, metadata.mode);
   await saveJobMetadata(jobDir, { ...metadata, mode });
@@ -77,14 +80,16 @@ export async function runPipeline(
     ...rawTranscript,
     words: await applyModeGlossary(rawTranscript.words, mode),
   };
+  if (!transcript.words.length) {
+    throw new Error("No speech was detected in the video. Check that it contains clear spoken audio and try again.");
+  }
   if (transcript.words !== rawTranscript.words) {
     await Bun.write(path.join(jobDir, "transcript.json"), JSON.stringify(transcript, null, 2));
   }
 
-  const candidatesPath = path.join(jobDir, "candidates.json");
   const profile = getMode(mode);
   const candidates: ClipCandidate[] = await timedStage("selection", async () => {
-    if (!force && (await Bun.file(candidatesPath).exists())) {
+    if (!force && !options.reselect && (await Bun.file(candidatesPath).exists())) {
       console.log(`Using cached candidates: ${candidatesPath}`);
       return (await Bun.file(candidatesPath).json()) as ClipCandidate[];
     }
@@ -93,7 +98,7 @@ export async function runPipeline(
       : [];
     const selected = await selectCandidates(
       transcript,
-      new RouterClient(process.env, options.signal),
+      llm ??= new RouterClient(process.env, options.signal),
       new Map(energy.map((item) => [item.sentenceId, item.score])),
       profile.audioWeight,
     );
@@ -113,7 +118,7 @@ export async function runPipeline(
   }));
   const missingMetadata = identifiedCandidates.filter((candidate) => !metadataById.has(candidate.id!));
   if (missingMetadata.length) {
-    const generated = await generateClipMetadata(transcript, missingMetadata, new RouterClient(process.env, options.signal));
+    const generated = await generateClipMetadata(transcript, missingMetadata, llm ??= new RouterClient(process.env, options.signal));
     for (const [id, metadata] of generated) metadataById.set(id, metadata);
   }
 

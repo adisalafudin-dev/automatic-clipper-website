@@ -12,7 +12,7 @@ services:
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_MODEL: ${LLM_MODEL:-hermes-main}
       WHISPER_MODEL: ${WHISPER_MODEL:-base}
-      WHISPER_LANG: ${WHISPER_LANG:-en}
+      WHISPER_LANG: ${WHISPER_LANG:-auto}
       WHISPER_BIN: ${WHISPER_BIN:-/usr/local/bin/whisper-cli}
       WHISPER_MODEL_PATH: ${WHISPER_MODEL_PATH:-}
       WHISPER_MODELS_DIR: ${WHISPER_MODELS_DIR:-/models}

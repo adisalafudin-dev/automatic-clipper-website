@@ -133,25 +133,25 @@ test("asks once for more options when a long chunk is underfilled", async () => 
   expect(selected).toHaveLength(7);
 });
 
-test("retries invalid JSON once, then skips the chunk", async () => {
+test("retries invalid JSON once, then fails instead of completing with no clips", async () => {
   let calls = 0;
   const oldWarn = console.warn;
   console.warn = () => {};
   try {
-    const selected = await selectCandidates(transcript, {
+    const selected = selectCandidates(transcript, {
       async generateJson() {
         calls++;
         throw new SyntaxError("invalid JSON");
       },
     });
+    await expect(selected).rejects.toThrow("Clip selection failed for all 1 transcript chunks");
     expect(calls).toBe(2);
-    expect(selected).toEqual([]);
   } finally {
     console.warn = oldWarn;
   }
 });
 
-test("retries schema errors and out-of-range sentence IDs", async () => {
+test("retries schema errors and out-of-range sentence IDs, then reports no generated clips", async () => {
   for (const value of [
     { candidates: [{ ...proposal(0), title: 3 }] },
     { candidates: [proposal(30)] },
@@ -160,14 +160,14 @@ test("retries schema errors and out-of-range sentence IDs", async () => {
     const oldWarn = console.warn;
     console.warn = () => {};
     try {
-      const selected = await selectCandidates(transcript, {
+      const selected = selectCandidates(transcript, {
         async generateJson() {
           calls++;
           return value;
         },
       });
+      await expect(selected).rejects.toThrow("Clip selection failed for all 1 transcript chunks");
       expect(calls).toBe(2);
-      expect(selected).toEqual([]);
     } finally {
       console.warn = oldWarn;
     }

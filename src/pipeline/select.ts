@@ -16,6 +16,11 @@ export async function selectCandidates(
   const sentences = transcriptSentences(transcript);
   const chunks = chunkSentences(sentences);
   const proposals = [];
+  const failures: string[] = [];
+
+  if (!sentences.length) {
+    throw new Error("No speech was detected in the video. Check that it contains clear spoken audio and try again.");
+  }
 
   for (const chunk of chunks) {
     const source = chunk.sentences
@@ -70,7 +75,9 @@ export async function selectCandidates(
       if (validated) proposals.push(...validated.candidates);
       console.log(`Pass 1 chunk ${chunk.index + 1}: ${((performance.now() - chunkStarted) / 1000).toFixed(2)}s`);
     } catch (error) {
-      console.warn(`Skipping chunk ${chunk.index + 1}: ${error instanceof Error ? error.message : String(error)}`);
+      const message = error instanceof Error ? error.message : String(error);
+      failures.push(message);
+      console.warn(`Skipping chunk ${chunk.index + 1}: ${message}`);
     }
   }
 
@@ -86,5 +93,11 @@ export async function selectCandidates(
   });
   const selected = rankAndMapCandidates(weighted, sentences);
   console.log(`Pass 2 ranking: ${((performance.now() - pass2Started) / 1000).toFixed(2)}s`);
+  if (!selected.length) {
+    if (!proposals.length && failures.length) {
+      throw new Error(`Clip selection failed for all ${chunks.length} transcript chunks. Check the 9Router connection and LLM_API_KEY, then retry. Last error: ${failures.at(-1)}`);
+    }
+    throw new Error("No clip candidates met the 30–90 second duration requirement. Check the transcript or use a video with more clear spoken content.");
+  }
   return selected;
 }

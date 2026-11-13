@@ -8,8 +8,9 @@ test("accepts supported English and Indonesian clip languages", () => {
   expect(isClipLanguage(null)).toBe(false);
 });
 
-test("uses Indonesian only when configured, otherwise defaults to English", () => {
+test("uses explicit configured language or defaults to automatic detection", () => {
   expect(configuredClipLanguage("id")).toBe("id");
   expect(configuredClipLanguage("en")).toBe("en");
-  expect(configuredClipLanguage(undefined)).toBe("en");
+  expect(configuredClipLanguage(undefined)).toBe("auto");
+  expect(isClipLanguage("auto")).toBe(true);
 });

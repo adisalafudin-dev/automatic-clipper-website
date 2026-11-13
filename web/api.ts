@@ -62,6 +62,10 @@ export async function cancelJob(jobId: string): Promise<void> {
   await request(`/jobs/${encodeURIComponent(jobId)}/cancel`, { method: "POST" });
 }
 
+export async function retryJob(jobId: string): Promise<void> {
+  await request(`/jobs/${encodeURIComponent(jobId)}/retry`, { method: "POST" });
+}
+
 export async function removeClip(jobId: string, clipId: string): Promise<void> {
   await request(`/jobs/${encodeURIComponent(jobId)}/clips/${encodeURIComponent(clipId)}`, { method: "DELETE" });
 }

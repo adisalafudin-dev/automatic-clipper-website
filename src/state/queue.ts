@@ -19,6 +19,7 @@ type QueueItem = {
   id: string;
   videoPath: string;
   force: boolean;
+  reselect?: boolean;
   operation?: "pipeline" | "render";
   faceTracking?: boolean;
   language?: string;
@@ -156,6 +157,7 @@ export class JobQueue {
               language: item.language,
               mode: item.mode,
               facecamRect: item.facecamRect ?? undefined,
+              reselect: item.reselect,
               signal: controller.signal,
             });
           }

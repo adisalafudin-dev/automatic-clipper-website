@@ -23,7 +23,7 @@ bun run check
 bun run start
 ```
 
-Open <http://127.0.0.1:3000>. The server binds to localhost by default. Choose a project name (the video filename is prefilled), English or Bahasa Indonesia, and a content mode for each upload, then upload a video up to 2 GB. Cancel a queued or running job from its row under **Recent projects**. Gaming mode stacks a configurable facecam crop above the gameplay; set the normalized `x,y,w,h` rectangle in the upload form. Its glossary in `glossaries/gaming.json` corrects configured transcript terms while keeping their timing. The selected language and mode are saved with the job and manifest. Available modes are Default, Gaming, and Podcast. Select the job under **Recent projects** to preview clips. Adjust a clip’s start/end or captions, then choose **Render changes**. Caption presets are Classic, Bold, and Clean; layouts include center crop, blurred background, and stacked panels. The hook-title overlay is optional.
+Open <http://127.0.0.1:3000>. The server binds to localhost by default. Choose a video (its filename is used as the project name) and click **Upload and create clips**. Whisper detects the spoken language automatically; the app transcribes, finds, and renders clips without manual selection. Videos up to 2 GB are accepted. Cancel a queued or running job from its row under **Recent projects**. Select a project to preview and download its clips. If clip generation fails or returns no usable clips, the project shows the reason and offers **Retry clip generation**, reusing the saved transcript. **Render all stale** appears only when clips already exist. Clip edits, caption presets, layouts, and content modes remain available in the editor and pipeline.
 
 Default retains center crop, Classic captions, and LLM-only ranking. Gaming uses the split facecam layout, Bold captions, glossary corrections, and a 0.3 audio-energy ranking weight. Podcast uses center crop, Clean captions, and a 0.1 audio-energy weight. Audio energy combines normalized FFmpeg RMS loudness (bounded by the 10th and 90th percentiles) with the model score.
 
@@ -47,6 +47,7 @@ The API and static UI share the local server, but API handlers live separately i
 | `GET /health` | Check server readiness |
 | `POST /jobs` | Upload a video or submit a local `videoPath` |
 | `POST /jobs/:id/cancel` | Cancel a queued or running job and stop its active subprocess |
+| `POST /jobs/:id/retry` | Retry clip selection for a project with no clips, reusing cached audio and transcript |
 | `GET /jobs` | List recent jobs |
 | `GET /jobs/:id` | Read job state, per-stage progress, and the clip manifest |
 | `GET /jobs/:id/clips/:clipId` | Preview a rendered clip |
@@ -63,7 +64,7 @@ Job state is stored in `data/jobs.sqlite`. Jobs run through an in-process queue 
 - `LLM_API_KEY`: key from your 9Router dashboard; keep it private.
 - `LLM_MODEL`: defaults to `hermes-main`.
 - `WHISPER_MODEL`: defaults to `base`; `small` is also supported if installed.
-- `WHISPER_LANG`: defaults to `en`; the upload selector supports English (`en`) and Bahasa Indonesia (`id`).
+- `WHISPER_LANG`: CLI language override; web uploads always use automatic language detection.
 - `WHISPER_BIN`: optional path to `whisper-cli`; defaults to the Windows tool path locally and `/usr/local/bin/whisper-cli` in Docker.
 - `WHISPER_MODELS_DIR`: optional model directory; defaults to the Windows tool model directory locally and `/models` in Docker.
 - `WHISPER_MODEL_PATH`: optional explicit model file path.
