@@ -107,6 +107,20 @@ test("selects valid proposals through the JSON generator interface", async () =>
   expect(capturedPrompt).toContain("fact-grounded");
   expect(capturedPrompt).toContain("private third-party crisis");
   expect(capturedPrompt).toContain("same language as the transcript (en)");
+  expect(capturedPrompt).toContain("payoff must be explicit in the transcript");
+  expect(capturedPrompt).toContain("Never infer an unseen gameplay result");
+  expect(capturedPrompt).toContain("only candidates scoring 7 or higher");
+});
+
+test("retries then rejects candidates below the payoff quality floor", async () => {
+  let calls = 0;
+  await expect(selectCandidates(transcript, {
+    async generateJson() {
+      calls++;
+      return { candidates: sentences.map((sentence) => proposal(sentence.id, 6)) };
+    },
+  })).rejects.toThrow("No clip candidates met the 30–90 second duration requirement");
+  expect(calls).toBe(2);
 });
 
 test("requests Bahasa Indonesia clip metadata for Indonesian transcripts", async () => {

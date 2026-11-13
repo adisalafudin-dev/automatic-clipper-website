@@ -6,6 +6,7 @@ import { transcriptSentences } from "./sentences.ts";
 import { combineScores } from "./audio-energy.ts";
 
 const SCHEMA = `{"candidates":[{"startSentenceId":0,"endSentenceId":1,"hook":"string","title":"string","score":0,"reason":"string"}]}`;
+const MIN_CANDIDATE_SCORE = 7;
 
 export async function selectCandidates(
   transcript: Transcript,
@@ -31,14 +32,16 @@ export async function selectCandidates(
       : `the same language as the transcript (${transcript.language})`;
     const prompt = [
       "Find self-contained short video clips with a strong opening, clear payoff, and no missing context.",
+      "Only propose a clip when its selected transcript contains the payoff, not just a setup, question, topic summary, or unresolved claim.",
+      "A payoff must be explicit in the transcript: a conclusion, answer, reveal, punchline, decision, or described outcome. Never infer an unseen gameplay result from commentary or reactions.",
       "Return 30–90 second clip candidates. Choose boundaries from the supplied sentence IDs only.",
-      "Return 8–10 varied candidate options when the transcript allows, spread across distinct topics and time ranges; include non-overlapping alternatives.",
+      "Return 8–10 varied candidate options scoring at least 7 when the transcript allows, spread across distinct topics and time ranges; include non-overlapping alternatives. Quality matters more than meeting the count.",
       "Aim for at least five final non-overlapping clips by offering alternatives across the full chunk, not several versions of one moment.",
       "Exclude sponsor reads, ads, housekeeping, and disconnected introductions or outros.",
       "Use fact-grounded, concise titles and hooks supported by the selected sentences; do not invent quotes or add sensational claims.",
       `Write every hook, title, and reason in ${outputLanguage}; keep the meaning faithful to the transcript.`,
       "Avoid exposing private third-party crisis, health, or financial details; prefer public-interest facts.",
-      "Score each candidate from 0 to 10 for hook strength, accuracy, clarity, and shareability.",
+      "Score each candidate from 0 to 10 for hook strength, payoff quality, context, accuracy, clarity, and shareability. Return only candidates scoring 7 or higher; if fewer qualify, return fewer.",
       "Do not include timestamps. Return only JSON with a candidates array, no markdown fences.",
       `Transcript chunk ${chunk.index + 1}/${chunks.length}:`,
       source,
@@ -53,7 +56,7 @@ export async function selectCandidates(
         try {
           const retryPrompt = attempt === 0
             ? prompt
-            : `${prompt}\n\nYour previous response had too few valid options. Return at least ${minimumProposals} distinct candidates if the transcript supports them.`;
+            : `${prompt}\n\nYour previous response had too few valid high-quality options. Return at least ${minimumProposals} distinct candidates scoring 7 or higher if the transcript supports them; do not lower the quality bar to fill the quota.`;
           const value = await llm.generateJson(retryPrompt, SCHEMA);
           const parsed = parseCandidateResponse(value);
           const invalidIds = parsed.candidates.some((candidate) =>
@@ -61,11 +64,12 @@ export async function selectCandidates(
             !chunk.sentences.some((sentence) => sentence.id === candidate.endSentenceId),
           );
           if (invalidIds) throw new Error("Candidate sentence IDs must belong to this chunk");
-          if (attempt === 0 && parsed.candidates.length < minimumProposals) {
-            console.warn(`Chunk ${chunk.index + 1} returned ${parsed.candidates.length} candidates; retrying for more options`);
+          const qualityCandidates = parsed.candidates.filter((candidate) => candidate.score >= MIN_CANDIDATE_SCORE);
+          if (attempt === 0 && qualityCandidates.length < minimumProposals) {
+            console.warn(`Chunk ${chunk.index + 1} returned ${qualityCandidates.length} candidates scoring at least ${MIN_CANDIDATE_SCORE}; retrying for more options`);
             continue;
           }
-          validated = parsed;
+          validated = { candidates: qualityCandidates };
           break;
         } catch (error) {
           if (attempt === 1) throw error;

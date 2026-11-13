@@ -1,22 +1,22 @@
 # Progress
 
-Phase: LOCAL CLIP FEEDBACK | Branch: main
+Phase: CLIP QUALITY TUNING | Branch: main
 
 ## Done
 
-- Added editor buttons to mark clips “Layak diposting” or “Lewati”, with optional skip reasons.
-- Feedback is validated and saved per job to local `feedback.json`; it never calls 9Router.
-- Clip deletion also removes its saved feedback.
-- Rebuilt the Docker app and confirmed health plus the local feedback field.
-- API tests cover both decisions, local persistence, invalid reasons, and cleanup; `bun run check`: 83 tests pass, 308 assertions.
+- Reviewed local feedback: 3 clips skipped, all for weak payoff.
+- Tightened selection to require an explicit transcript payoff and score at least 7.
+- Low-scoring proposals get one retry, then are excluded instead of filling the clip list with weak choices.
+- `bun run check`: 84 tests pass, 313 assertions.
 
 ## Next
 
-- Label real generated clips locally to start measuring the acceptance rate.
+- Rebuild the app, then retry selection to review the stricter results.
 
 ## Known bugs / open questions
 
-- Whisper can still repeat words over music or speech-like audio; no generic repeat removal was added.
+- Retrying selection sends transcript text to 9Router; local ratings remain private.
+- The score is a model estimate, not a guarantee of platform performance.
 
 ## Run
 
