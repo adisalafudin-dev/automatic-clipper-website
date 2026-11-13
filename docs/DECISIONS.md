@@ -68,3 +68,5 @@ Format: `date | decision | reason`
 2026-11-13 | Check for an LLM API key before starting transcription when clip selection is required | A missing key should fail before spending CPU time on a long video.
 2026-11-13 | Force LF line endings for shell scripts with `.gitattributes` | Docker on Linux cannot run a CRLF shebang copied from a Windows checkout.
 2026-11-13 | Keep Mode and Track faces as optional upload controls while defaulting to automatic language detection and clip generation | Users can choose Gaming or face tracking without adding clip selection to the upload flow.
+2026-11-13 | Gaming defaults the facecam crop to bottom-right, follows detected faces within that crop, and excludes that overlay from the gameplay crop | The reviewed source places its camera at bottom-right, while the previous top-right crop and centered game crop omitted or duplicated it.
+2026-11-13 | A requested face-tracking render fails clearly when the YuNet model is missing or has a checksum mismatch | Silent center-crop fallback made an enabled tracking option appear to work when tracking could not start.

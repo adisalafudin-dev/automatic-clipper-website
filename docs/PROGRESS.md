@@ -5,21 +5,21 @@ Phase: PHASE FIX | Branch: phase-9-content-modes
 ## Done
 
 - Upload keeps automatic clipping and language detection, with optional content mode and face tracking controls.
-- No-speech and no-valid-candidate outcomes fail with a clear reason instead of completing with zero clips.
-- Empty-result projects can retry selection using cached audio and transcript; stale rendering appears only when clips exist.
-- Clip metadata follows the language detected in the transcript.
-- Docker startup fixed by preserving LF line endings; rebuilt container is healthy at `/health`.
-- Phase 7–9 editing, layouts, content modes, cancellation, and editable project names remain available.
-- `bun run check` covers unit tests and short FFmpeg end-to-end/integration fixtures.
+- Gaming now crops the bottom-right facecam by default, accepts a custom crop, and tracks faces within that window while excluding the camera overlay from gameplay.
+- Missing face-tracking model now reports an actionable error; YuNet is installed in the local Docker volume.
+- Re-rendered both clips of the user's Gaming project; project is completed and both clip files were refreshed.
+- No-speech and no-valid-candidate outcomes fail clearly; empty projects can retry selection with cached transcript.
+- Docker startup is healthy; phase 7–9 editing, layouts, content modes, cancellation, and named projects remain available.
+- `bun run check`: 77 tests pass, 294 assertions.
 
 ## Next
 
-- Retry existing empty projects; verify a 30-minute Indonesian upload when available.
+- Improve Indonesian recognition only with reviewable caption edits or an explicitly chosen larger Whisper model; `base` still mishears some words.
 
 ## Known bugs / open questions
 
-- Real 30–60 minute Whisper/9Router processing remains unverified without the user's source video, configured model, and 9Router key.
-- The staged `whisper.cpp` gitlink is user data and excluded from project commits.
+- Indonesian Whisper `base` output contains occasional word errors; this fix changes framing, not recognition quality.
+- Real 30–60 minute Whisper/9Router processing remains unverified. The staged `whisper.cpp` gitlink is user data and excluded from project commits.
 
 ## Run
 

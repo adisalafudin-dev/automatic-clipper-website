@@ -401,7 +401,7 @@ export function createJobApi(
         edits[clipId] = { ...edits[clipId], renderStatus: "queued", renderError: undefined };
         await writeFile(path.join(jobDir, "edits.json"), JSON.stringify(edits, null, 2));
         store.requeue(jobId);
-        queue.enqueue({ id: jobId, videoPath: job.videoPath, force: true, operation: "render", faceTracking: job.faceTracking, clipId, mode: job.mode });
+        queue.enqueue({ id: jobId, videoPath: job.videoPath, force: true, operation: "render", faceTracking: job.faceTracking, clipId, mode: job.mode, facecamRect: job.facecamRect });
         return json({ job: store.get(jobId) }, 202);
       }
 
@@ -478,7 +478,7 @@ export function createJobApi(
           captionWords: (payload.captionWords as ClipRenderEdit["captionWords"] | undefined) ?? previous.captionWords ?? [],
           style: (payload.style as ClipRenderEdit["style"] | undefined) ?? previous.style ?? "classic",
           titleOverlay: (payload.titleOverlay as boolean | undefined) ?? previous.titleOverlay ?? false,
-          layout: (payload.layout as ClipRenderEdit["layout"] | undefined) ?? previous.layout ?? "crop",
+          layout: (payload.layout as ClipRenderEdit["layout"] | undefined) ?? previous.layout,
           origStartMs: previous.origStartMs ?? oldClip.start,
           origEndMs: previous.origEndMs ?? oldClip.end,
           renderStatus: "none",
@@ -502,7 +502,7 @@ export function createJobApi(
         }
         await writeFile(path.join(jobDir, "edits.json"), JSON.stringify(edits, null, 2));
         store.requeue(jobId);
-        queue.enqueue({ id: jobId, videoPath: job.videoPath, force: true, operation: "render", faceTracking: job.faceTracking, onlyStale: true, mode: job.mode });
+        queue.enqueue({ id: jobId, videoPath: job.videoPath, force: true, operation: "render", faceTracking: job.faceTracking, onlyStale: true, mode: job.mode, facecamRect: job.facecamRect });
         return json({ job: store.get(jobId) }, 202);
       }
 

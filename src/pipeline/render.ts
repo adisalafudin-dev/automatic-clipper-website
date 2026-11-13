@@ -59,7 +59,7 @@ function pictureFilters(cropX: string, assRelative: string): string {
   ].join(",");
 }
 
-export function buildLayoutGraph(inputLabel: string, outputLabel: string, layout: LayoutPreset, cropX: string, assRelative: string, facecamRect?: FacecamRect): string {
+export function buildLayoutGraph(inputLabel: string, outputLabel: string, layout: LayoutPreset, cropX: string, assRelative: string, facecamRect?: FacecamRect, trackFacecam = false): string {
   const subtitles = `subtitles=filename='${slashPath(assRelative)}'`;
   if (layout === "crop") return `${inputLabel}${pictureFilters(cropX, assRelative)}[${outputLabel}]`;
   if (layout === "blurred") {
@@ -70,12 +70,16 @@ export function buildLayoutGraph(inputLabel: string, outputLabel: string, layout
       `[${outputLabel}bg][${outputLabel}fg]overlay=0:0,${subtitles}[${outputLabel}]`;
   }
   if (layout === "split") {
-    const rect = facecamRect ?? { x: 0.68, y: 0.04, w: 0.28, h: 0.28 };
+    const rect = facecamRect ?? { x: 0.70, y: 0.70, w: 0.30, h: 0.30 };
+    const faceX = trackFacecam
+      ? `min(max(${cropX}\\,iw*${rect.x})\\,iw*${rect.x + rect.w}-ow)`
+      : `iw*${rect.x}`;
+    const gameX = rect.x + rect.w / 2 > 0.5 ? "0" : "iw-ow";
     // FFmpeg equivalent: ffmpeg -i input.mp4 -filter_complex "[0:v]split=2[face][main];[face]crop=... ,scale=1080:960[facepanel];[main]crop=...,scale=1080:960[gamepanel];[facepanel][gamepanel]vstack=inputs=2,subtitles=filename='captions/clip.ass'[vout]" -map "[vout]" output.mp4
     // Keep captions on the final 1080x1920 canvas so the lower-third position stays correct.
     return `${inputLabel}split=2[${outputLabel}face0][${outputLabel}main0];` +
-      `[${outputLabel}face0]crop=w=iw*${rect.w}:h=ih*${rect.h}:x=iw*${rect.x}:y=ih*${rect.y},scale=1080:960:force_original_aspect_ratio=decrease,pad=1080:960:(ow-iw)/2:(oh-ih)/2:color=black[${outputLabel}top];` +
-      `[${outputLabel}main0]crop=w='min(iw,ih*9/8)':h='min(ih,iw*8/9)':x=(iw-ow)/2:y=(ih-oh)/2,scale=1080:960[${outputLabel}bottom];` +
+      `[${outputLabel}face0]crop=w=iw*${rect.w}:h=ih*${rect.h}:x='${faceX}':y=ih*${rect.y},scale=1080:960:force_original_aspect_ratio=decrease,pad=1080:960:(ow-iw)/2:(oh-ih)/2:color=black[${outputLabel}top];` +
+      `[${outputLabel}main0]crop=w='min(iw,ih*9/8)':h='min(ih,iw*8/9)':x=${gameX}:y=(ih-oh)/2,scale=1080:960[${outputLabel}bottom];` +
       `[${outputLabel}top][${outputLabel}bottom]vstack=inputs=2,${subtitles}[${outputLabel}]`;
   }
   // Stack two width-fitted copies in equal-height panels for a landscape source.
@@ -95,6 +99,7 @@ export function buildRenderArgs(
   pauses: SourceSpan[] = [],
   layout: LayoutPreset = "crop",
   facecamRect?: FacecamRect,
+  trackFacecam = false,
 ): string[] {
   const seconds = (ms: number) => (ms / 1000).toFixed(3);
   const cropX = cropXExpression(faceCenters);
@@ -114,7 +119,7 @@ export function buildRenderArgs(
       inputs.push(`[v${index}][a${index}]`);
     });
     chains.push(`${inputs.join("")}concat=n=${pauses.length}:v=1:a=1[vcat][acat]`);
-    chains.push(buildLayoutGraph("[vcat]", "vout", layout, cropX, assRelative, facecamRect));
+    chains.push(buildLayoutGraph("[vcat]", "vout", layout, cropX, assRelative, facecamRect, trackFacecam));
     chains.push("[acat]loudnorm=I=-16:TP=-1.5:LRA=11[aout]");
     return [
       "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
@@ -129,7 +134,7 @@ export function buildRenderArgs(
     return [
       "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
       "-ss", seconds(start), "-i", input, "-t", seconds(end - start),
-      "-filter_complex", `${buildLayoutGraph("[0:v]", "vout", layout, cropX, assRelative, facecamRect)};[0:a]loudnorm=I=-16:TP=-1.5:LRA=11[aout]`,
+      "-filter_complex", `${buildLayoutGraph("[0:v]", "vout", layout, cropX, assRelative, facecamRect, trackFacecam)};[0:a]loudnorm=I=-16:TP=-1.5:LRA=11[aout]`,
       "-map", "[vout]", "-map", "[aout]",
       ...encode,
     ];
@@ -221,7 +226,9 @@ export async function renderClips(
         console.log(`Face tracking ${id}: ${faceCenters.length} sparse samples in ${((performance.now() - trackingStarted) / 1000).toFixed(2)}s`);
         if (!faceCenters.length) console.warn(`No face found for ${id}; using center crop`);
       } catch (error) {
-        console.warn(`Face tracking failed for ${id}; using center crop: ${error instanceof Error ? error.message : String(error)}`);
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.includes("face model missing") || message.includes("checksum mismatch")) throw error;
+        console.warn(`Face tracking failed for ${id}; using center crop: ${message}`);
       }
     }
     const override = edit?.caption?.trim();
@@ -252,6 +259,7 @@ export async function renderClips(
         multiple ? pauses : [],
         edit?.layout ?? (modeLayout === "split" ? "split" : "crop"),
         facecamRect,
+        modeLayout === "split" && faceTracking && faceCenters.length > 0,
       );
       try {
         await runFfmpeg(args, absoluteJobDir, signal);

@@ -34,7 +34,7 @@ export const MODES = Object.freeze({
     name: "gaming",
     description: "Gaming streamer clips with energetic moments and game terminology.",
     layout: "split",
-    facecamRect: { x: 0.68, y: 0.04, w: 0.28, h: 0.28 },
+    facecamRect: { x: 0.70, y: 0.70, w: 0.30, h: 0.30 },
     audioWeight: 0.3,
     captionPreset: "bold",
   }),

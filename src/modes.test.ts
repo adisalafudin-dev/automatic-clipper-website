@@ -19,6 +19,7 @@ test("rejects unknown and inherited object names with valid choices", () => {
 
 test("gaming uses split layout and facecam rectangles stay normalized", () => {
   expect(getMode("gaming").layout).toBe("split");
+  expect(getMode("gaming").facecamRect).toEqual({ x: 0.7, y: 0.7, w: 0.3, h: 0.3 });
   expect(getMode("gaming").audioWeight).toBe(0.3);
   expect(getMode("podcast").audioWeight).toBe(0.1);
   expect(getMode("default").audioWeight).toBe(0);

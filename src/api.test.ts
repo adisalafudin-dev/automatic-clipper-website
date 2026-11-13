@@ -369,6 +369,7 @@ test("browser upload supports preview, trim and caption edits, and queued rerend
   let rerenderFaceTracking = false;
   let rerenderOnlyStale = false;
   let rerenderMode = "";
+  let rerenderFacecamRect: { x: number; y: number; w: number; h: number } | null = null;
   const queue = new JobQueue(store, async (videoPath, jobDir, _force, _report, options) => {
     faceTrackingRequested = options.faceTracking === true;
     pipelineMode = options.mode ?? "";
@@ -382,11 +383,12 @@ test("browser upload supports preview, trim and caption edits, and queued rerend
     }]));
     await Bun.write(path.join(jobDir, clip.file), "fixture clip");
     return { ...result, manifest: { ...result.manifest, source: videoPath } };
-  }, async (videoPath, _jobDir, report, faceTracking, _clipId, onlyStale, mode) => {
+  }, async (videoPath, _jobDir, report, faceTracking, _clipId, onlyStale, mode, facecamRect) => {
     renderCount++;
     rerenderFaceTracking = faceTracking;
     rerenderOnlyStale = onlyStale === true;
     rerenderMode = mode ?? "";
+    rerenderFacecamRect = facecamRect ?? null;
     report("rendering", 0);
     await Bun.sleep(10);
     report("rendering", 100);
@@ -405,6 +407,7 @@ test("browser upload supports preview, trim and caption edits, and queued rerend
         "x-video-filename": "uploaded.mp4",
         "x-face-tracking": "true",
         "x-mode": "gaming",
+        "x-facecam-rect": "0.7,0.7,0.3,0.3",
       },
       body: new File(["source video"], "uploaded.mp4", { type: "video/mp4" }),
     });
@@ -459,6 +462,7 @@ test("browser upload supports preview, trim and caption edits, and queued rerend
     expect(rerenderFaceTracking).toBe(true);
     expect(rerenderOnlyStale).toBe(true);
     expect(rerenderMode).toBe("gaming");
+    expect(JSON.stringify(rerenderFacecamRect)).toBe('{"x":0.7,"y":0.7,"w":0.3,"h":0.3}');
     const updated = store.get(created.id)!;
     expect(updated.result?.clips).toHaveLength(1);
     expect(updated.result?.mode).toBe("gaming");

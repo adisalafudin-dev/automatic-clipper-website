@@ -25,6 +25,8 @@ bun run start
 
 Open <http://127.0.0.1:3000>. The server binds to localhost by default. Choose a video (its filename is used as the project name), optionally choose a content mode or face tracking, and click **Upload and create clips**. Whisper detects the spoken language automatically; the app transcribes, finds, and renders clips without manual selection. Videos up to 2 GB are accepted. Cancel a queued or running job from its row under **Recent projects**. Select a project to preview and download its clips. If clip generation fails or returns no usable clips, the project shows the reason and offers **Retry clip generation**, reusing the saved transcript. **Render all stale** appears only when clips already exist. Clip edits, caption presets, layouts, and content modes remain available in the editor and pipeline.
 
+Gaming mode defaults to a bottom-right facecam crop; adjust its normalized `x,y,w,h` rectangle in the upload form if the camera is elsewhere. Face tracking follows detected faces inside that crop. For Docker, install its small YuNet model once with `docker compose exec clipper bun run download-face-model`.
+
 Default retains center crop, Classic captions, and LLM-only ranking. Gaming uses the split facecam layout, Bold captions, glossary corrections, and a 0.3 audio-energy ranking weight. Podcast uses center crop, Clean captions, and a 0.1 audio-energy weight. Audio energy combines normalized FFmpeg RMS loudness (bounded by the 10th and 90th percentiles) with the model score.
 
 To change the address, set `HOST` or `PORT` before running `bun run start`. Restart the server after updating code or configuration.
