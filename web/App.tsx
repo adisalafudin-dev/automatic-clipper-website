@@ -11,6 +11,7 @@ export function App() {
   const [selectedId, setSelectedId] = useState("");
   const [selectedJob, setSelectedJob] = useState<Awaited<ReturnType<typeof getJob>> | null>(null);
   const [file, setFile] = useState<File | null>(null);
+  const [projectName, setProjectName] = useState("");
   const [faceTracking, setFaceTracking] = useState(false);
   const [language, setLanguage] = useState<ClipLanguage>("en");
   const [mode, setMode] = useState<ModeName>("default");
@@ -50,10 +51,11 @@ export function App() {
     setUploading(true);
     setError("");
     try {
-      const job = await uploadVideo(file, faceTracking, language, mode, mode === "gaming" ? facecamRect : undefined);
+      const job = await uploadVideo(file, faceTracking, language, mode, mode === "gaming" ? facecamRect : undefined, projectName);
       setSelectedId(job.id);
       setSelectedJob({ job, edits: {} });
       setFile(null);
+      setProjectName("");
       await refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -77,7 +79,8 @@ export function App() {
     <section className="hero"><p className="eyebrow">VIDEO CLIPPER</p><h1>Make the moments<br /><em>worth sharing.</em></h1><p>Turn long videos into short, captioned clips on your computer.</p></section>
     <section className="panel">
       <form className="upload-row" onSubmit={(event) => void submitUpload(event)}>
-        <label className="file-picker">{file ? file.name : "Choose a video (MP4, MOV, MKV, WEBM)"}<input key={file?.name ?? "empty"} type="file" accept="video/mp4,video/quicktime,video/x-matroska,video/webm,.m4v" onChange={(event) => setFile(event.currentTarget.files?.[0] ?? null)} /></label>
+        <label className="file-picker">{file ? file.name : "Choose a video (MP4, MOV, MKV, WEBM)"}<input key={file?.name ?? "empty"} type="file" accept="video/mp4,video/quicktime,video/x-matroska,video/webm,.m4v" onChange={(event) => { const selected = event.currentTarget.files?.[0] ?? null; setFile(selected); setProjectName(selected?.name.replace(/\.[^.]+$/, "") ?? ""); }} /></label>
+        <label className="language-option"><span>Project name</span><input value={projectName} maxLength={100} onChange={(event) => setProjectName(event.currentTarget.value)} placeholder="Name this video" /></label>
         <label className="language-option"><span>Video language</span><select value={language} onChange={(event) => setLanguage(event.currentTarget.value as ClipLanguage)}><option value="en">English</option><option value="id">Bahasa Indonesia</option></select></label>
         <label className="language-option"><span>Mode</span><select value={mode} onChange={(event) => setMode(event.currentTarget.value as ModeName)}>{modes.map((item) => <option value={item.name} key={item.name}>{item.name}</option>)}</select></label>
         {mode === "gaming" && <label className="language-option"><span>Facecam x,y,w,h</span><input value={facecamRect} onChange={(event) => setFacecamRect(event.currentTarget.value)} aria-label="Facecam rectangle normalized x,y,w,h" /></label>}

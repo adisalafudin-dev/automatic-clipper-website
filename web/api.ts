@@ -23,13 +23,14 @@ export async function getModes(): Promise<ModeProfile[]> {
   return await request<ModeProfile[]>("/modes");
 }
 
-export async function uploadVideo(file: File, faceTracking: boolean, language: ClipLanguage, mode: ModeName, facecamRect?: string): Promise<JobView> {
+export async function uploadVideo(file: File, faceTracking: boolean, language: ClipLanguage, mode: ModeName, facecamRect?: string, displayName?: string): Promise<JobView> {
   const form = new FormData();
   form.set("video", file);
   form.set("faceTracking", String(faceTracking));
   form.set("language", language);
   form.set("mode", mode);
   if (facecamRect) form.set("facecamRect", facecamRect);
+  if (displayName) form.set("displayName", displayName);
   const result = await request<{ job: JobView }>("/jobs", { method: "POST", body: form });
   return result.job;
 }

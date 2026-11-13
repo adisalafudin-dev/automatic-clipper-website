@@ -4,6 +4,7 @@ import { PIPELINE_STAGES, type PipelineStage } from "../pipeline/run.ts";
 import type { ClipLanguage } from "../types.ts";
 import type { ModeName } from "../modes.ts";
 import type { FacecamRect } from "../modes.ts";
+import { defaultProjectName } from "../project-name.ts";
 
 export type JobStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 export type StageStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
@@ -18,6 +19,7 @@ export type JobStages = Record<PipelineStage, JobStage>;
 export type Job = {
   id: string;
   videoPath: string;
+  displayName: string;
   faceTracking: boolean;
   language: ClipLanguage;
   mode: ModeName;
@@ -35,6 +37,7 @@ export type Job = {
 type JobRow = {
   id: string;
   video_path: string;
+  display_name: string;
   face_tracking: number;
   language: ClipLanguage;
   mode: ModeName;
@@ -60,6 +63,7 @@ function fromRow(row: JobRow): Job {
   return {
     id: row.id,
     videoPath: row.video_path,
+    displayName: row.display_name || defaultProjectName(row.video_path),
     faceTracking: row.face_tracking === 1,
     language: row.language,
     mode: row.mode,
@@ -81,6 +85,7 @@ export class JobStore {
       CREATE TABLE IF NOT EXISTS jobs (
         id TEXT PRIMARY KEY,
         video_path TEXT NOT NULL,
+        display_name TEXT NOT NULL DEFAULT '',
         face_tracking INTEGER NOT NULL DEFAULT 0,
         language TEXT NOT NULL DEFAULT 'en',
         mode TEXT NOT NULL DEFAULT 'default',
@@ -100,6 +105,9 @@ export class JobStore {
     if (!columns.some((column) => column.name === "face_tracking")) {
       db.exec("ALTER TABLE jobs ADD COLUMN face_tracking INTEGER NOT NULL DEFAULT 0");
     }
+    if (!columns.some((column) => column.name === "display_name")) {
+      db.exec("ALTER TABLE jobs ADD COLUMN display_name TEXT NOT NULL DEFAULT ''");
+    }
     if (!columns.some((column) => column.name === "language")) {
       db.exec("ALTER TABLE jobs ADD COLUMN language TEXT NOT NULL DEFAULT 'en'");
     }
@@ -117,6 +125,7 @@ export class JobStore {
         db.exec(`CREATE TABLE jobs (
           id TEXT PRIMARY KEY,
           video_path TEXT NOT NULL,
+          display_name TEXT NOT NULL DEFAULT '',
           face_tracking INTEGER NOT NULL DEFAULT 0,
           language TEXT NOT NULL DEFAULT 'en',
           mode TEXT NOT NULL DEFAULT 'default',
@@ -130,7 +139,7 @@ export class JobStore {
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
         )`);
-        db.exec(`INSERT INTO jobs SELECT id, video_path, face_tracking, language, mode, facecam_rect, status, stage, progress, stages_json, error, result_json, created_at, updated_at FROM jobs_before_cancellation`);
+        db.exec(`INSERT INTO jobs SELECT id, video_path, display_name, face_tracking, language, mode, facecam_rect, status, stage, progress, stages_json, error, result_json, created_at, updated_at FROM jobs_before_cancellation`);
         db.exec("DROP TABLE jobs_before_cancellation");
         db.exec("CREATE INDEX IF NOT EXISTS jobs_created_at_idx ON jobs(created_at DESC)");
         db.exec("COMMIT");
@@ -141,13 +150,13 @@ export class JobStore {
     }
   }
 
-  create(id: string, videoPath: string, faceTracking = false, language: ClipLanguage = "en", mode: ModeName = "default", facecamRect: FacecamRect | null = null): Job {
+  create(id: string, videoPath: string, faceTracking = false, language: ClipLanguage = "en", mode: ModeName = "default", facecamRect: FacecamRect | null = null, displayName = defaultProjectName(videoPath)): Job {
     const now = new Date().toISOString();
     const stages = initialStages();
     this.db.query(`
-      INSERT INTO jobs (id, video_path, face_tracking, language, mode, facecam_rect, status, stage, progress, stages_json, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, 'queued', 'queued', 0, ?, ?, ?)
-    `).run(id, videoPath, faceTracking ? 1 : 0, language, mode, facecamRect ? JSON.stringify(facecamRect) : null, JSON.stringify(stages), now, now);
+      INSERT INTO jobs (id, video_path, display_name, face_tracking, language, mode, facecam_rect, status, stage, progress, stages_json, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', 'queued', 0, ?, ?, ?)
+    `).run(id, videoPath, displayName, faceTracking ? 1 : 0, language, mode, facecamRect ? JSON.stringify(facecamRect) : null, JSON.stringify(stages), now, now);
     return this.get(id)!;
   }
 

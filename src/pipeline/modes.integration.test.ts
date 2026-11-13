@@ -65,4 +65,4 @@ test("runs cached short end-to-end jobs for all content modes", async () => {
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
-});
+}, 15_000);

@@ -9,8 +9,8 @@ Phase: 9 | Branch: phase-9-content-modes
 - Phase 8 Docker setup is complete; English and Bahasa Indonesia upload options are supported.
 - Phase 9.1–9.11 complete: Default/Gaming/Podcast profiles, split layout, energy scoring, glossaries, metadata, caption presets, and Docker mode e2e.
 - Experimental zoom was dropped after a measured 55% slowdown on a short CPU fixture.
-- Follow-up: UI/API cancellation stops queued jobs and aborts active child processes.
-- `bun run check` covers unit and FFmpeg integration tests.
+- Follow-up: UI/API cancellation stops active jobs; uploaded videos have editable names prefilled from the filename.
+- `bun run check` covers unit and FFmpeg integration tests; the three-mode fixture allows 15s for slower CPUs.
 
 ## Next
 

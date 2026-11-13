@@ -69,7 +69,8 @@ test("HTTP API accepts jobs, exposes persisted stage progress, and returns resul
       body: JSON.stringify({ videoPath: input }),
     });
     expect(created.status).toBe(202);
-    const { job: queued } = await created.json() as { job: { id: string; status: string } };
+    const { job: queued } = await created.json() as { job: { id: string; status: string; filename: string } };
+    expect(queued.filename).toBe("video");
     expect(queued.id).toMatch(/^[0-9a-f-]{36}$/i);
     expect(["queued", "running", "completed"]).toContain(queued.status);
 
@@ -489,12 +490,14 @@ test("multipart uploads from an already-open Phase 6 browser still work", async 
   try {
     const form = new FormData();
     form.set("video", new File(["legacy browser upload"], "small.mp4", { type: "video/mp4" }));
+    form.set("displayName", "Podcast episode");
     form.set("faceTracking", "false");
     form.set("language", "id");
     form.set("mode", "podcast");
     const response = await fetch(`http://127.0.0.1:${server.port}/jobs`, { method: "POST", body: form });
     expect(response.status).toBe(202);
-    const { job } = await response.json() as { job: { id: string; videoPath: string; language: string; mode: string } };
+    const { job } = await response.json() as { job: { id: string; videoPath: string; filename: string; language: string; mode: string } };
+    expect(job.filename).toBe("Podcast episode");
     expect(job.language).toBe("id");
     expect(job.mode).toBe("podcast");
     expect(await Bun.file(job.videoPath).text()).toBe("legacy browser upload");
