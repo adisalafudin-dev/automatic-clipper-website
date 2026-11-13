@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { applyCaptionWordEdits, captionEvents, buildAss, buildAssStyleLine } from "./captions.ts";
+import { applyCaptionWordEdits, captionEvents, buildAss, buildAssStyleLine, buildAssTitleEvent } from "./captions.ts";
 import { buildLayoutGraph, buildRenderArgs } from "./render.ts";
 import type { Word } from "../types.ts";
 
@@ -43,6 +43,15 @@ test("caption presets build their configured ASS style lines", () => {
   expect(buildAssStyleLine("classic")).toBe("Style: Default,Arial,66,&H00FFFFFF,&H0000FFFF,&H00101010,&H80000000,-1,0,1,4,1,5,70,70,0,1");
   expect(buildAssStyleLine("bold")).toBe("Style: Default,Arial,74,&H00FFFFFF,&H007BF2C1,&H00101010,&H90000000,-1,0,1,6,2,5,70,70,0,1");
   expect(buildAssStyleLine("clean")).toBe("Style: Default,Arial,58,&H00FFFFFF,&H007BF2C1,&H00101010,&H70000000,0,0,1,2,0,5,76,76,0,1");
+});
+
+test("hook title overlay lasts 2.5 seconds and escapes ASS text with preset styling", () => {
+  const event = buildAssTitleEvent("A {hook}", 5000, "bold");
+  expect(event).toContain("Dialogue: 1,0:00:00.00,0:00:02.50");
+  expect(event).toContain("\\fs60\\bord4");
+  expect(event).toContain("A \\{hook\\}");
+  expect(buildAssTitleEvent("short", 1000, "classic")).toContain("0:00:01.00");
+  expect(buildAssTitleEvent("", 1000, "clean")).toBeNull();
 });
 
 test("caption word edits change text, preserve timestamps, and allow deleting words", () => {

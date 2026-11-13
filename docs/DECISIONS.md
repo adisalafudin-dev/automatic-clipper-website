@@ -58,3 +58,4 @@ Format: `date | decision | reason`
 2026-11-13 | Apply mode glossary replacements after transcription and distribute multi-word replacement timing proportionally across the matched phrase span | Corrected words reach selection and captions without moving the phrase outside its original audio interval.
 2026-11-13 | Store generated per-clip Indonesian social metadata under `metadata` in `clips.json` and reuse it on reruns and preserve it through rerenders | Keeps the existing title/hook fields stable and avoids repeated model calls for completed clips.
 2026-11-13 | Use the existing Classic, Bold, and Clean ASS definitions as the default, gaming, and podcast profile presets | Reuses tested caption styling and keeps the default rendering appearance unchanged.
+2026-11-13 | Render an enabled hook/title overlay for 2.5 seconds and style it from the selected ASS preset | Gives viewers the clip context at the opening while keeping the existing opt-in behavior.

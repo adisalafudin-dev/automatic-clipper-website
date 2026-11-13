@@ -70,6 +70,20 @@ export function buildAssStyleLine(style: CaptionStyle): string {
   return "Style: Default,Arial,66,&H00FFFFFF,&H0000FFFF,&H00101010,&H80000000,-1,0,1,4,1,5,70,70,0,1";
 }
 
+export function buildAssTitleEvent(title: string, duration: number, style: CaptionStyle): string | null {
+  const normalized = title.trim().replace(/\s+/g, " ");
+  if (!normalized || duration <= 0) return null;
+  const lines = normalized.match(/.{1,28}(?:\s|$)/g)?.map((line) => line.trim()).filter(Boolean) ?? [normalized];
+  const escaped = lines.map(escapeAss).join("\\N");
+  const settings = style === "bold"
+    ? "\\an8\\pos(540,150)\\fs60\\bord4\\shad2\\1c&H00FFFFFF&"
+    : style === "clean"
+      ? "\\an8\\pos(540,150)\\fs48\\bord2\\shad0\\1c&H00FFFFFF&"
+      : "\\an8\\pos(540,150)\\fs54\\bord3\\shad1\\1c&H00FFFFFF&";
+  const end = assTime(Math.min(2500, duration));
+  return `Dialogue: 1,${assTime(0)},${end},Default,,0,0,0,,{${settings}}${escaped}`;
+}
+
 export function buildAss(
   words: Word[],
   clipStart: number,
@@ -101,10 +115,7 @@ export function buildAss(
     }).join(" ");
     return `Dialogue: 0,${assTime(event.start)},${assTime(event.end)},Default,,0,0,0,,${text}`;
   });
-  if (options.title?.trim()) {
-    const title = options.title.trim().replace(/\s+/g, " ");
-    const titleText = title.match(/.{1,28}(?:\s|$)/g)?.map((line) => line.trim()).filter(Boolean).join("\\N") ?? title;
-    events.unshift(`Dialogue: 1,${assTime(0)},${assTime(clipEnd - clipStart)},Default,,0,0,0,,{\\an8\\pos(540,150)\\fs54\\bord3\\shad1}${escapeAss(titleText)}`);
-  }
+  const titleEvent = options.title ? buildAssTitleEvent(options.title, clipEnd - clipStart, style) : null;
+  if (titleEvent) events.unshift(titleEvent);
   return `${[...header, ...events].join("\n")}\n`;
 }
