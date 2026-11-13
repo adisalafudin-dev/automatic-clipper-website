@@ -172,6 +172,7 @@ export async function renderClips(
   faceTracking = false,
   modeLayout: "center-crop" | "split" = "center-crop",
   facecamRect?: FacecamRect,
+  captionPreset: CaptionStyle = "classic",
 ): Promise<ClipsManifest> {
   const absoluteJobDir = path.resolve(jobDir);
   const absoluteVideo = path.resolve(videoPath);
@@ -229,7 +230,7 @@ export async function renderClips(
       captionWords,
       captionStart,
       captionEnd,
-      { style: edit?.style, title: edit?.titleOverlay ? candidate.title : undefined },
+      { style: edit?.style, preset: captionPreset, title: edit?.titleOverlay ? candidate.title : undefined },
     ));
     if (!force && !faceTracking && (await Bun.file(outputPath).exists())) {
       console.log(`Using cached render: ${outputRelative}`);

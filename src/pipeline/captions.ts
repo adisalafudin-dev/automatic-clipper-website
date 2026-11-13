@@ -64,18 +64,20 @@ function escapeAss(text: string): string {
   return text.replaceAll("\\", "\\\\").replaceAll("{", "\\{").replaceAll("}", "\\}");
 }
 
+export function buildAssStyleLine(style: CaptionStyle): string {
+  if (style === "bold") return "Style: Default,Arial,74,&H00FFFFFF,&H007BF2C1,&H00101010,&H90000000,-1,0,1,6,2,5,70,70,0,1";
+  if (style === "clean") return "Style: Default,Arial,58,&H00FFFFFF,&H007BF2C1,&H00101010,&H70000000,0,0,1,2,0,5,76,76,0,1";
+  return "Style: Default,Arial,66,&H00FFFFFF,&H0000FFFF,&H00101010,&H80000000,-1,0,1,4,1,5,70,70,0,1";
+}
+
 export function buildAss(
   words: Word[],
   clipStart: number,
   clipEnd: number,
-  options: { style?: CaptionStyle; title?: string } = {},
+  options: { style?: CaptionStyle; preset?: CaptionStyle; title?: string } = {},
 ): string {
-  const style = options.style ?? "classic";
-  const styleLine = style === "bold"
-    ? "Style: Default,Arial,74,&H00FFFFFF,&H007BF2C1,&H00101010,&H90000000,-1,0,1,6,2,5,70,70,0,1"
-    : style === "clean"
-      ? "Style: Default,Arial,58,&H00FFFFFF,&H007BF2C1,&H00101010,&H70000000,0,0,1,2,0,5,76,76,0,1"
-      : "Style: Default,Arial,66,&H00FFFFFF,&H0000FFFF,&H00101010,&H80000000,-1,0,1,4,1,5,70,70,0,1";
+  const style = options.style ?? options.preset ?? "classic";
+  const styleLine = buildAssStyleLine(style);
   const header = [
     "[Script Info]",
     "ScriptType: v4.00+",

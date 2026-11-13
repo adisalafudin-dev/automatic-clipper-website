@@ -4,6 +4,7 @@ export type ModeProfile = {
   layout: "center-crop" | "split";
   facecamRect: FacecamRect;
   audioWeight: number;
+  captionPreset: "classic" | "bold" | "clean";
 };
 
 export type FacecamRect = { x: number; y: number; w: number; h: number };
@@ -27,6 +28,7 @@ export const MODES = Object.freeze({
     layout: "center-crop",
     facecamRect: { x: 0.68, y: 0.04, w: 0.28, h: 0.28 },
     audioWeight: 0,
+    captionPreset: "classic",
   }),
   gaming: Object.freeze({
     name: "gaming",
@@ -34,6 +36,7 @@ export const MODES = Object.freeze({
     layout: "split",
     facecamRect: { x: 0.68, y: 0.04, w: 0.28, h: 0.28 },
     audioWeight: 0.3,
+    captionPreset: "bold",
   }),
   podcast: Object.freeze({
     name: "podcast",
@@ -41,6 +44,7 @@ export const MODES = Object.freeze({
     layout: "center-crop",
     facecamRect: { x: 0.68, y: 0.04, w: 0.28, h: 0.28 },
     audioWeight: 0.1,
+    captionPreset: "clean",
   }),
 } satisfies Record<string, ModeProfile>);
 

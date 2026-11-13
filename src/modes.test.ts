@@ -22,6 +22,9 @@ test("gaming uses split layout and facecam rectangles stay normalized", () => {
   expect(getMode("gaming").audioWeight).toBe(0.3);
   expect(getMode("podcast").audioWeight).toBe(0.1);
   expect(getMode("default").audioWeight).toBe(0);
+  expect(getMode("default").captionPreset).toBe("classic");
+  expect(getMode("gaming").captionPreset).toBe("bold");
+  expect(getMode("podcast").captionPreset).toBe("clean");
   expect(getMode("default").layout).toBe("center-crop");
   expect(parseFacecamRect("0.6,0.1,0.3,0.25")).toEqual({ x: 0.6, y: 0.1, w: 0.3, h: 0.25 });
   for (const value of ["x,0,1,1", "-0.1,0,0.2,0.2", "0.8,0,0.3,0.2", "0,0,0,1"]) {

@@ -112,7 +112,7 @@ export async function runPipeline(
   }
 
   const renderedManifest = await timedStage("rendering", () =>
-    renderClips(videoPath, jobDir, transcript, identifiedCandidates, force, {}, options.faceTracking === true, getMode(mode).layout, options.facecamRect ?? getMode(mode).facecamRect),
+    renderClips(videoPath, jobDir, transcript, identifiedCandidates, force, {}, options.faceTracking === true, profile.layout, options.facecamRect ?? profile.facecamRect, profile.captionPreset),
   );
   const manifest: ClipsManifest = {
     ...renderedManifest,
