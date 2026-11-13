@@ -5,7 +5,7 @@ import { renderClips, type ClipRenderEdit } from "../pipeline/render.ts";
 import type { Transcript } from "../types.ts";
 import type { ClipCandidate } from "../pipeline/candidates.ts";
 import { JobStore } from "./jobs.ts";
-import type { ModeName } from "../modes.ts";
+import { getMode, type FacecamRect, type ModeName } from "../modes.ts";
 
 export type PipelineRunner = (
   videoPath: string,
@@ -23,13 +23,14 @@ type QueueItem = {
   faceTracking?: boolean;
   language?: string;
   mode?: ModeName;
+  facecamRect?: FacecamRect | null;
   clipId?: string;
   onlyStale?: boolean;
 };
 
-type RenderRunner = (videoPath: string, jobDir: string, report: PipelineProgress, faceTracking: boolean, clipId?: string, onlyStale?: boolean, mode?: ModeName) => Promise<PipelineResult>;
+type RenderRunner = (videoPath: string, jobDir: string, report: PipelineProgress, faceTracking: boolean, clipId?: string, onlyStale?: boolean, mode?: ModeName, facecamRect?: FacecamRect | null) => Promise<PipelineResult>;
 
-async function renderExisting(videoPath: string, jobDir: string, report: PipelineProgress, faceTracking: boolean, clipId?: string, onlyStale = false, mode: ModeName = "default"): Promise<PipelineResult> {
+async function renderExisting(videoPath: string, jobDir: string, report: PipelineProgress, faceTracking: boolean, clipId?: string, onlyStale = false, mode: ModeName = "default", facecamRect?: FacecamRect | null): Promise<PipelineResult> {
   report("rendering", 0);
   const transcript = JSON.parse(await readFile(path.join(jobDir, "transcript.json"), "utf8")) as Transcript;
   const storedCandidates = JSON.parse(await readFile(path.join(jobDir, "candidates.json"), "utf8")) as ClipCandidate[];
@@ -58,7 +59,8 @@ async function renderExisting(videoPath: string, jobDir: string, report: Pipelin
     }
   }
   if (clipId && !selected.length) throw new Error(`Clip ${clipId} is missing its candidate data`);
-  const renderedManifest = await renderClips(videoPath, jobDir, transcript, selected, true, edits, faceTracking);
+  const profile = getMode(mode);
+  const renderedManifest = await renderClips(videoPath, jobDir, transcript, selected, true, edits, faceTracking, profile.layout, facecamRect ?? profile.facecamRect);
   const manifest = { ...renderedManifest, mode };
   await Bun.write(path.join(jobDir, "clips.json"), JSON.stringify(manifest, null, 2));
   report("rendering", 100);
@@ -108,6 +110,7 @@ export class JobQueue {
               item.clipId,
               item.onlyStale,
               item.mode,
+              item.facecamRect,
             );
             const manifest = { ...rendered.manifest, mode: item.mode ?? "default" };
             await Bun.write(path.join(jobDir, "clips.json"), JSON.stringify(manifest, null, 2));
@@ -117,6 +120,7 @@ export class JobQueue {
               faceTracking: item.faceTracking === true,
               language: item.language,
               mode: item.mode,
+              facecamRect: item.facecamRect ?? undefined,
             });
           }
           if (renderIds.length) await updateRenderStatus(jobDir, result.manifest.clips.map((clip) => clip.id), "done");

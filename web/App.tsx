@@ -14,6 +14,7 @@ export function App() {
   const [faceTracking, setFaceTracking] = useState(false);
   const [language, setLanguage] = useState<ClipLanguage>("en");
   const [mode, setMode] = useState<ModeName>("default");
+  const [facecamRect, setFacecamRect] = useState("0.68,0.04,0.28,0.28");
   const [modes, setModes] = useState<ModeProfile[]>([]);
   const [uploading, setUploading] = useState(false);
 
@@ -49,7 +50,7 @@ export function App() {
     setUploading(true);
     setError("");
     try {
-      const job = await uploadVideo(file, faceTracking, language, mode);
+      const job = await uploadVideo(file, faceTracking, language, mode, mode === "gaming" ? facecamRect : undefined);
       setSelectedId(job.id);
       setSelectedJob({ job, edits: {} });
       setFile(null);
@@ -69,6 +70,7 @@ export function App() {
         <label className="file-picker">{file ? file.name : "Choose a video (MP4, MOV, MKV, WEBM)"}<input key={file?.name ?? "empty"} type="file" accept="video/mp4,video/quicktime,video/x-matroska,video/webm,.m4v" onChange={(event) => setFile(event.currentTarget.files?.[0] ?? null)} /></label>
         <label className="language-option"><span>Video language</span><select value={language} onChange={(event) => setLanguage(event.currentTarget.value as ClipLanguage)}><option value="en">English</option><option value="id">Bahasa Indonesia</option></select></label>
         <label className="language-option"><span>Mode</span><select value={mode} onChange={(event) => setMode(event.currentTarget.value as ModeName)}>{modes.map((item) => <option value={item.name} key={item.name}>{item.name}</option>)}</select></label>
+        {mode === "gaming" && <label className="language-option"><span>Facecam x,y,w,h</span><input value={facecamRect} onChange={(event) => setFacecamRect(event.currentTarget.value)} aria-label="Facecam rectangle normalized x,y,w,h" /></label>}
         <label className="check-option"><input type="checkbox" checked={faceTracking} onChange={(event) => setFaceTracking(event.currentTarget.checked)} /> Track faces</label>
         <button className="button primary" type="submit" disabled={uploading}>{uploading ? "Uploading…" : "Upload video"}</button>
       </form>

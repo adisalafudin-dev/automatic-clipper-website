@@ -53,3 +53,4 @@ Format: `date | decision | reason`
 2026-11-13 | Phase 9.1 defines immutable `default`, `gaming`, and `podcast` profiles; missing mode resolves to `default`, invalid modes throw | Centralizes the supported names and preserves current behavior as the compatibility default.
 2026-11-13 | CLI mode precedence is explicit `--mode`, saved `job.json` mode, then `default` | Reruns reuse the original profile by default while allowing an intentional override.
 2026-11-13 | Phase 9.3 stores each job's mode in SQLite and returns mode profiles as a JSON array from `GET /modes` | The UI can load the supported choices from the API, while the saved mode remains authoritative for rerenders.
+2026-11-13 | Gaming uses a normalized `x,y,w,h` facecam crop above a centered 16:9 gameplay crop; captions render on the final stacked frame | Manual coordinates avoid auto-detection and keep the filter graph deterministic.

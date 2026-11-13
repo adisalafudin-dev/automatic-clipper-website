@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { applyCaptionWordEdits, captionEvents, buildAss } from "./captions.ts";
-import { buildRenderArgs } from "./render.ts";
+import { buildLayoutGraph, buildRenderArgs } from "./render.ts";
 import type { Word } from "../types.ts";
 
 const words: Word[] = [
@@ -99,4 +99,13 @@ test("stacked layout creates two fitted panels and composes with pause concatena
   expect(graph).toContain("concat=n=2:v=1:a=1[vcat][acat]");
   expect(graph).toContain("scale=1080:960:force_original_aspect_ratio=decrease");
   expect(graph).toContain("vstack=inputs=2,subtitles=filename='captions/clip.ass'[vout]");
+});
+
+test("gaming split graph crops a normalized facecam and captions the stacked canvas", () => {
+  expect(buildLayoutGraph("[0:v]", "vout", "split", "(iw-ow)/2", "captions/clip.ass", { x: 0.6, y: 0.1, w: 0.3, h: 0.25 })).toBe(
+    "[0:v]split=2[voutface0][voutmain0];" +
+    "[voutface0]crop=w=iw*0.3:h=ih*0.25:x=iw*0.6:y=ih*0.1,scale=1080:960:force_original_aspect_ratio=decrease,pad=1080:960:(ow-iw)/2:(oh-ih)/2:color=black[vouttop];" +
+    "[voutmain0]crop=w='min(iw,ih*16/9)':h='min(ih,iw*9/16)':x=(iw-ow)/2:y=(ih-oh)/2,scale=1080:960[voutbottom];" +
+    "[vouttop][voutbottom]vstack=inputs=2,subtitles=filename='captions/clip.ass'[vout]",
+  );
 });

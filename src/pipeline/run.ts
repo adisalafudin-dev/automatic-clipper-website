@@ -8,6 +8,7 @@ import { selectCandidates } from "./select.ts";
 import { transcribe } from "./transcribe.ts";
 import type { ClipCandidate } from "./candidates.ts";
 import type { ModeName } from "../modes.ts";
+import { getMode, type FacecamRect } from "../modes.ts";
 import { readJobMetadata, resolveJobMode, saveJobMetadata } from "../job-metadata.ts";
 
 export const PIPELINE_STAGES = [
@@ -26,7 +27,7 @@ export type PipelineResult = {
   candidateCount: number;
 };
 
-export type PipelineOptions = { faceTracking?: boolean; language?: string; mode?: ModeName };
+export type PipelineOptions = { faceTracking?: boolean; language?: string; mode?: ModeName; facecamRect?: FacecamRect };
 
 export async function runPipeline(
   videoPath: string,
@@ -75,7 +76,7 @@ export async function runPipeline(
   });
 
   const renderedManifest = await timedStage("rendering", () =>
-    renderClips(videoPath, jobDir, transcript, candidates, force, {}, options.faceTracking === true),
+    renderClips(videoPath, jobDir, transcript, candidates, force, {}, options.faceTracking === true, getMode(mode).layout, options.facecamRect ?? getMode(mode).facecamRect),
   );
   const manifest: ClipsManifest = { ...renderedManifest, mode };
   await Bun.write(path.join(jobDir, "clips.json"), JSON.stringify(manifest, null, 2));

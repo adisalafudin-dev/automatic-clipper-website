@@ -8,7 +8,7 @@ import type { ClipRenderEdit } from "./pipeline/render.ts";
 import type { ClipLanguage, Transcript } from "./types.ts";
 import { transcriptSentences } from "./pipeline/sentences.ts";
 import { configuredClipLanguage, isClipLanguage } from "./languages.ts";
-import { getMode, listModes, type ModeName } from "./modes.ts";
+import { getMode, listModes, parseFacecamRect, type FacecamRect, type ModeName } from "./modes.ts";
 
 const MAX_UPLOAD_BYTES = 2_000_000_000;
 
@@ -66,6 +66,7 @@ export function createJobApi(
         let faceTracking = request.headers.get("x-face-tracking") === "true";
         let languageInput: unknown = configuredClipLanguage(process.env.WHISPER_LANG);
         let modeInput: unknown;
+        let facecamRectInput: unknown;
         const contentType = request.headers.get("content-type") ?? "";
         let uploadName: string | undefined;
         let uploadBody: ReadableStream<Uint8Array> | null = null;
@@ -79,6 +80,7 @@ export function createJobApi(
             faceTracking = form.get("faceTracking") === "true";
             languageInput = form.get("language") ?? languageInput;
             modeInput = form.get("mode") ?? undefined;
+            facecamRectInput = form.get("facecamRect") ?? undefined;
           } catch {
             return json({ error: "Upload must be valid multipart form data" }, 400);
           }
@@ -96,6 +98,7 @@ export function createJobApi(
           if (!uploadName) return json({ error: "x-video-filename is required" }, 400);
           languageInput = request.headers.get("x-language") ?? languageInput;
           modeInput = request.headers.get("x-mode") ?? undefined;
+          facecamRectInput = request.headers.get("x-facecam-rect") ?? undefined;
           uploadBody = request.body;
           if (!uploadBody) return json({ error: "Video upload body is empty" }, 400);
           const contentLength = Number(request.headers.get("content-length") ?? "0");
@@ -154,6 +157,7 @@ export function createJobApi(
           }
           languageInput = payload.language ?? languageInput;
           if (Object.hasOwn(payload, "mode")) modeInput = payload.mode;
+          if (Object.hasOwn(payload, "facecamRect")) facecamRectInput = payload.facecamRect;
           faceTracking = payload.faceTracking === true;
           videoPath = path.resolve(payload.videoPath.trim());
           force = payload.force === true;
@@ -175,10 +179,16 @@ export function createJobApi(
         } catch (error) {
           return json({ error: error instanceof Error ? error.message : String(error) }, 400);
         }
+        let facecamRect: FacecamRect | null = null;
+        if (facecamRectInput !== undefined && facecamRectInput !== null && facecamRectInput !== "") {
+          if (typeof facecamRectInput !== "string") return json({ error: "facecamRect must be x,y,w,h using normalized values" }, 400);
+          try { facecamRect = parseFacecamRect(facecamRectInput); }
+          catch (error) { return json({ error: error instanceof Error ? error.message : String(error) }, 400); }
+        }
 
         const id = randomUUID();
-        const job = store.create(id, videoPath, faceTracking, language, mode);
-        queue.enqueue({ id, videoPath, force, faceTracking, language, mode });
+        const job = store.create(id, videoPath, faceTracking, language, mode, facecamRect);
+        queue.enqueue({ id, videoPath, force, faceTracking, language, mode, facecamRect });
         return json({ job }, 202, { location: `/jobs/${id}` });
       }
 

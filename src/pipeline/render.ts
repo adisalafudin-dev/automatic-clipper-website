@@ -6,8 +6,9 @@ import { applyCaptionWordEdits, buildAss, type CaptionStyle } from "./captions.t
 import { keepSpans, outputOffsetMs, spanDuration, wordsOnOutputTimeline, type SourceSpan } from "./pauses.ts";
 import { sampleFaceCenters, type FaceCenterSample } from "../vision/faces.ts";
 import type { ModeName } from "../modes.ts";
+import type { FacecamRect } from "../modes.ts";
 
-export type LayoutPreset = "crop" | "blurred" | "stacked";
+export type LayoutPreset = "crop" | "blurred" | "stacked" | "split";
 export type RenderStatus = "none" | "queued" | "rendering" | "done" | "failed";
 export type ClipRenderEdit = { startMs?: number; endMs?: number; caption?: string; captionWords?: Array<{ wordIndex: number; text: string }>; style?: CaptionStyle; titleOverlay?: boolean; layout?: LayoutPreset; origStartMs?: number; origEndMs?: number; renderStatus?: RenderStatus; renderError?: string; renderedAt?: string };
 
@@ -56,7 +57,7 @@ function pictureFilters(cropX: string, assRelative: string): string {
   ].join(",");
 }
 
-function layoutGraph(inputLabel: string, outputLabel: string, layout: LayoutPreset, cropX: string, assRelative: string): string {
+export function buildLayoutGraph(inputLabel: string, outputLabel: string, layout: LayoutPreset, cropX: string, assRelative: string, facecamRect?: FacecamRect): string {
   const subtitles = `subtitles=filename='${slashPath(assRelative)}'`;
   if (layout === "crop") return `${inputLabel}${pictureFilters(cropX, assRelative)}[${outputLabel}]`;
   if (layout === "blurred") {
@@ -65,6 +66,15 @@ function layoutGraph(inputLabel: string, outputLabel: string, layout: LayoutPres
       `[${outputLabel}bg0]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=28[${outputLabel}bg];` +
       `[${outputLabel}fg0]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black[${outputLabel}fg];` +
       `[${outputLabel}bg][${outputLabel}fg]overlay=0:0,${subtitles}[${outputLabel}]`;
+  }
+  if (layout === "split") {
+    const rect = facecamRect ?? { x: 0.68, y: 0.04, w: 0.28, h: 0.28 };
+    // FFmpeg equivalent: ffmpeg -i input.mp4 -filter_complex "[0:v]split=2[face][main];[face]crop=... ,scale=1080:960[facepanel];[main]crop=...,scale=1080:960[gamepanel];[facepanel][gamepanel]vstack=inputs=2,subtitles=filename='captions/clip.ass'[vout]" -map "[vout]" output.mp4
+    // Keep captions on the final 1080x1920 canvas so the lower-third position stays correct.
+    return `${inputLabel}split=2[${outputLabel}face0][${outputLabel}main0];` +
+      `[${outputLabel}face0]crop=w=iw*${rect.w}:h=ih*${rect.h}:x=iw*${rect.x}:y=ih*${rect.y},scale=1080:960:force_original_aspect_ratio=decrease,pad=1080:960:(ow-iw)/2:(oh-ih)/2:color=black[${outputLabel}top];` +
+      `[${outputLabel}main0]crop=w='min(iw,ih*16/9)':h='min(ih,iw*9/16)':x=(iw-ow)/2:y=(ih-oh)/2,scale=1080:960[${outputLabel}bottom];` +
+      `[${outputLabel}top][${outputLabel}bottom]vstack=inputs=2,${subtitles}[${outputLabel}]`;
   }
   // Stack two width-fitted copies in equal-height panels for a landscape source.
   return `${inputLabel}split=2[${outputLabel}top0][${outputLabel}bottom0];` +
@@ -82,6 +92,7 @@ export function buildRenderArgs(
   faceCenters: FaceCenterSample[] = [],
   pauses: SourceSpan[] = [],
   layout: LayoutPreset = "crop",
+  facecamRect?: FacecamRect,
 ): string[] {
   const seconds = (ms: number) => (ms / 1000).toFixed(3);
   const cropX = cropXExpression(faceCenters);
@@ -101,7 +112,7 @@ export function buildRenderArgs(
       inputs.push(`[v${index}][a${index}]`);
     });
     chains.push(`${inputs.join("")}concat=n=${pauses.length}:v=1:a=1[vcat][acat]`);
-    chains.push(layoutGraph("[vcat]", "vout", layout, cropX, assRelative));
+    chains.push(buildLayoutGraph("[vcat]", "vout", layout, cropX, assRelative, facecamRect));
     chains.push("[acat]loudnorm=I=-16:TP=-1.5:LRA=11[aout]");
     return [
       "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
@@ -116,7 +127,7 @@ export function buildRenderArgs(
     return [
       "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
       "-ss", seconds(start), "-i", input, "-t", seconds(end - start),
-      "-filter_complex", `${layoutGraph("[0:v]", "vout", layout, cropX, assRelative)};[0:a]loudnorm=I=-16:TP=-1.5:LRA=11[aout]`,
+      "-filter_complex", `${buildLayoutGraph("[0:v]", "vout", layout, cropX, assRelative, facecamRect)};[0:a]loudnorm=I=-16:TP=-1.5:LRA=11[aout]`,
       "-map", "[vout]", "-map", "[aout]",
       ...encode,
     ];
@@ -157,6 +168,8 @@ export async function renderClips(
   force = false,
   edits: Record<string, ClipRenderEdit> = {},
   faceTracking = false,
+  modeLayout: "center-crop" | "split" = "center-crop",
+  facecamRect?: FacecamRect,
 ): Promise<ClipsManifest> {
   const absoluteJobDir = path.resolve(jobDir);
   const absoluteVideo = path.resolve(videoPath);
@@ -227,7 +240,8 @@ export async function renderClips(
         renderEnd,
         faceCenters,
         multiple ? pauses : [],
-        edit?.layout ?? "crop",
+        edit?.layout ?? (modeLayout === "split" ? "split" : "crop"),
+        facecamRect,
       );
       try {
         await runFfmpeg(args, absoluteJobDir);
@@ -235,7 +249,7 @@ export async function renderClips(
         if (!faceTracking || !faceCenters.length) throw error;
         console.warn(`Tracked crop render failed for ${id}; retrying center crop: ${error instanceof Error ? error.message : String(error)}`);
         await runFfmpeg(
-          buildRenderArgs(absoluteVideo, outputRelative, captionsRelative, renderStart, renderEnd, [], multiple ? pauses : [], edit?.layout ?? "crop"),
+          buildRenderArgs(absoluteVideo, outputRelative, captionsRelative, renderStart, renderEnd, [], multiple ? pauses : [], edit?.layout ?? (modeLayout === "split" ? "split" : "crop"), facecamRect),
           absoluteJobDir,
         );
       }

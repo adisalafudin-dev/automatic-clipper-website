@@ -22,10 +22,11 @@ Phase: 9 | Branch: phase-9-content-modes
 - Phase 9.1: added immutable default, gaming, and podcast profiles with default lookup, ordered listing, and explicit invalid-name errors.
 - Phase 9.2: added `--mode`, persisted the selected mode in `job.json` and `clips.json`, and reused the saved mode unless explicitly overridden.
 - Phase 9.3: added `GET /modes`, per-job SQLite mode selection, upload UI dropdown, and mode propagation through rerenders.
+- Phase 9.4: added gaming split-screen rendering with normalized facecam crop override in CLI/UI and persisted per-job settings.
 
 ## Next
 
-- Phase 9.4: add the gaming split layout and configurable facecam rectangle through FFmpeg filter graph, CLI, and UI.
+- Phase 9.5: add cached audio energy scoring and profile-based ranking weights.
 
 ## Known bugs / open questions
 

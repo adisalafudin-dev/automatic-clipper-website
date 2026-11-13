@@ -1,4 +1,4 @@
-import type { ModeName } from "./modes.ts";
+import type { FacecamRect, ModeName } from "./modes.ts";
 
 // The parts of whisper-cli's -ojf JSON that we use. Times are in milliseconds.
 export type WhisperToken = {
@@ -31,6 +31,7 @@ export type JobListItem = {
   filename: string;
   language: ClipLanguage;
   mode: ModeName;
+  facecamRect: FacecamRect | null;
   status: "queued" | "running" | "completed" | "failed";
   stage: string;
   progress: number;
