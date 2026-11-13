@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent, type MouseEvent } from "react";
 import type { JobListItem } from "../src/types.ts";
-import { cancelJob, getJob, getJobs, uploadVideo } from "./api.ts";
+import type { ModeName, ModeProfile } from "../src/modes.ts";
+import { cancelJob, getJob, getJobs, getModes, uploadVideo } from "./api.ts";
 import { JobEditor } from "./JobEditor.tsx";
 
 export function App() {
@@ -11,6 +12,9 @@ export function App() {
   const [selectedJob, setSelectedJob] = useState<Awaited<ReturnType<typeof getJob>> | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [projectName, setProjectName] = useState("");
+  const [faceTracking, setFaceTracking] = useState(false);
+  const [mode, setMode] = useState<ModeName>("default");
+  const [modes, setModes] = useState<ModeProfile[]>([]);
   const [uploading, setUploading] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -31,6 +35,9 @@ export function App() {
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
+    void getModes().then(setModes).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason)));
+  }, []);
+  useEffect(() => {
     if (!jobs.some((job) => job.status === "queued" || job.status === "running")) return;
     const timer = window.setInterval(() => void refresh(), 2_000);
     return () => window.clearInterval(timer);
@@ -42,7 +49,7 @@ export function App() {
     setUploading(true);
     setError("");
     try {
-      const job = await uploadVideo(file, false, "auto", "default", undefined, projectName);
+      const job = await uploadVideo(file, faceTracking, "auto", mode, undefined, projectName);
       setSelectedId(job.id);
       setSelectedJob({ job, edits: {} });
       setFile(null);
@@ -72,6 +79,8 @@ export function App() {
       <form className="upload-row" onSubmit={(event) => void submitUpload(event)}>
         <label className="file-picker">{file ? file.name : "Choose a video (MP4, MOV, MKV, WEBM)"}<input key={file?.name ?? "empty"} type="file" accept="video/mp4,video/quicktime,video/x-matroska,video/webm,.m4v" onChange={(event) => { const selected = event.currentTarget.files?.[0] ?? null; setFile(selected); setProjectName(selected?.name.replace(/\.[^.]+$/, "") ?? ""); }} /></label>
         <label className="language-option"><span>Project name</span><input value={projectName} maxLength={100} onChange={(event) => setProjectName(event.currentTarget.value)} placeholder="Name this video" /></label>
+        <label className="language-option"><span>Mode</span><select value={mode} onChange={(event) => setMode(event.currentTarget.value as ModeName)}>{modes.map((item) => <option value={item.name} key={item.name}>{item.name}</option>)}</select></label>
+        <label className="check-option"><input type="checkbox" checked={faceTracking} onChange={(event) => setFaceTracking(event.currentTarget.checked)} /> Track faces</label>
         <button className="button primary" type="submit" disabled={uploading}>{uploading ? "Uploading…" : "Upload and create clips"}</button>
       </form>
       <div className="section-title"><div><p className="eyebrow">YOUR WORKSPACE</p><h2>Recent projects</h2></div><button className="button quiet" onClick={() => void refresh()}>Refresh</button></div>

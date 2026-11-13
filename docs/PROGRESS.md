@@ -4,7 +4,7 @@ Phase: PHASE FIX | Branch: phase-9-content-modes
 
 ## Done
 
-- Upload uses automatic Whisper language detection and the Default mode without manual clip selection.
+- Upload keeps automatic clipping and language detection, with optional content mode and face tracking controls.
 - No-speech and no-valid-candidate outcomes fail with a clear reason instead of completing with zero clips.
 - Empty-result projects can retry selection using cached audio and transcript; stale rendering appears only when clips exist.
 - Clip metadata follows the language detected in the transcript.
