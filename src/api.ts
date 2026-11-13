@@ -5,13 +5,25 @@ import { JobQueue } from "./state/queue.ts";
 import { JobStore } from "./state/jobs.ts";
 import type { ClipCandidate } from "./pipeline/candidates.ts";
 import type { ClipRenderEdit } from "./pipeline/render.ts";
-import type { ClipLanguage, Transcript } from "./types.ts";
+import type { ClipFeedback, ClipFeedbackDecision, ClipFeedbackReason, ClipLanguage, Transcript } from "./types.ts";
 import { transcriptSentences } from "./pipeline/sentences.ts";
 import { isClipLanguage } from "./languages.ts";
 import { getMode, listModes, parseFacecamRect, type FacecamRect, type ModeName } from "./modes.ts";
 import { defaultProjectName, normalizeProjectName } from "./project-name.ts";
 
 const MAX_UPLOAD_BYTES = 2_000_000_000;
+const CLIP_FEEDBACK_REASONS = new Set<ClipFeedbackReason>([
+  "weak_hook", "missing_context", "weak_payoff", "transcript_error",
+]);
+
+async function readClipFeedback(jobDir: string): Promise<Record<string, ClipFeedback>> {
+  try {
+    return JSON.parse(await readFile(path.join(jobDir, "feedback.json"), "utf8")) as Record<string, ClipFeedback>;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return {};
+    throw error;
+  }
+}
 
 function json(body: unknown, status = 200, headers?: Record<string, string>): Response {
   return Response.json(body, { status, headers });
@@ -262,7 +274,41 @@ export function createJobApi(
         } catch (error) {
           if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
         }
-        return json({ job: { ...job, filename: job.displayName }, edits });
+        const feedback = await readClipFeedback(path.join(jobRoot, job.id));
+        return json({ job: { ...job, filename: job.displayName }, edits, feedback });
+      }
+
+      const clipFeedbackMatch = url.pathname.match(/^\/jobs\/([^/]+)\/clips\/(clip-\d{2})\/feedback$/);
+      if (clipFeedbackMatch && request.method === "PUT") {
+        let jobId: string;
+        try { jobId = decodeURIComponent(clipFeedbackMatch[1]!); }
+        catch { return json({ error: "Invalid job ID" }, 400); }
+        const job = store.get(jobId);
+        if (!job?.result) return json({ error: "Completed job not found" }, 404);
+        const clipId = clipFeedbackMatch[2]!;
+        if (!job.result.clips.some((clip) => clip.id === clipId)) return json({ error: "Clip not found" }, 404);
+        let payload: unknown;
+        try { payload = await request.json(); }
+        catch { return json({ error: "Request body must be valid JSON" }, 400); }
+        if (!isRecord(payload) || Object.keys(payload).some((key) => key !== "decision" && key !== "reason")) {
+          return json({ error: "Feedback must include a decision and an optional reason" }, 400);
+        }
+        const decision = payload.decision;
+        const reason = payload.reason;
+        if (decision !== "post" && decision !== "skip") return json({ error: "Decision must be post or skip" }, 400);
+        if (reason !== undefined && reason !== "" && (typeof reason !== "string" || !CLIP_FEEDBACK_REASONS.has(reason as ClipFeedbackReason))) {
+          return json({ error: "Reason must be weak_hook, missing_context, weak_payoff, or transcript_error" }, 400);
+        }
+        if (decision === "post" && reason) return json({ error: "Reasons apply to skipped clips only" }, 400);
+        const feedback = await readClipFeedback(path.join(jobRoot, jobId));
+        const entry: ClipFeedback = {
+          decision: decision as ClipFeedbackDecision,
+          ...(decision === "skip" && reason ? { reason: reason as ClipFeedbackReason } : {}),
+          updatedAt: new Date().toISOString(),
+        };
+        feedback[clipId] = entry;
+        await writeFile(path.join(jobRoot, jobId, "feedback.json"), JSON.stringify(feedback, null, 2));
+        return json({ feedback });
       }
 
       const transcriptMatch = url.pathname.match(/^\/jobs\/([^/]+)\/transcript$/);
@@ -379,6 +425,11 @@ export function createJobApi(
         catch (error) { if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error; }
         delete edits[clipId];
         await writeFile(path.join(jobDir, "edits.json"), JSON.stringify(edits, null, 2));
+        const feedback = await readClipFeedback(jobDir);
+        if (feedback[clipId]) {
+          delete feedback[clipId];
+          await writeFile(path.join(jobDir, "feedback.json"), JSON.stringify(feedback, null, 2));
+        }
         for (const relative of [`clips/${clipId}.mp4`, `captions/${clipId}.ass`]) {
           await rm(path.join(jobDir, relative), { force: true });
         }

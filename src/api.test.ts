@@ -267,9 +267,39 @@ test("UI endpoints serve byte ranges, transcript sentences, and create, render, 
     expect(renderBody.edits["clip-02"]!.renderStatus).toBe("done");
     expect(typeof renderBody.edits["clip-02"]!.renderedAt).toBe("string");
 
+    const rated = await fetch(`${baseUrl}/jobs/${jobId}/clips/clip-01/feedback`, {
+      method: "PUT", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ decision: "skip", reason: "weak_hook" }),
+    });
+    expect(rated.status).toBe(200);
+    expect((await rated.json() as { feedback: Record<string, { decision: string; reason?: string }> }).feedback["clip-01"]).toMatchObject({
+      decision: "skip", reason: "weak_hook",
+    });
+    expect(await Bun.file(path.join(jobDir, "feedback.json")).exists()).toBe(true);
+    const invalidFeedback = await fetch(`${baseUrl}/jobs/${jobId}/clips/clip-01/feedback`, {
+      method: "PUT", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ decision: "skip", reason: "viral_score" }),
+    });
+    expect(invalidFeedback.status).toBe(400);
+    const invalidPostReason = await fetch(`${baseUrl}/jobs/${jobId}/clips/clip-01/feedback`, {
+      method: "PUT", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ decision: "post", reason: "weak_hook" }),
+    });
+    expect(invalidPostReason.status).toBe(400);
+    const approved = await fetch(`${baseUrl}/jobs/${jobId}/clips/clip-01/feedback`, {
+      method: "PUT", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ decision: "post" }),
+    });
+    expect((await approved.json() as { feedback: Record<string, { decision: string; reason?: string }> }).feedback["clip-01"]).toMatchObject({ decision: "post" });
+    const persistedFeedback = await fetch(`${baseUrl}/jobs/${jobId}`);
+    const persistedBody = await persistedFeedback.json() as { feedback: Record<string, { decision: string; reason?: string }> };
+    expect(persistedBody.feedback["clip-01"]).toMatchObject({ decision: "post" });
+
     const deleted = await fetch(`${baseUrl}/jobs/${jobId}/clips/clip-01`, { method: "DELETE" });
     expect(deleted.status).toBe(200);
     expect(store.get(jobId)!.result!.clips.map((clip) => clip.id)).toEqual(["clip-02"]);
+    const afterDelete = await fetch(`${baseUrl}/jobs/${jobId}`);
+    expect((await afterDelete.json() as { feedback: Record<string, unknown> }).feedback["clip-01"]).toBeUndefined();
   } finally {
     server.stop(true);
     db.close();

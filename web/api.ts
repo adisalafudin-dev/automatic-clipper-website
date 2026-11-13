@@ -1,4 +1,4 @@
-import type { ClipLanguage, JobListItem, JobView, UiClipEdit, UiSentence } from "../src/types.ts";
+import type { ClipFeedback, ClipFeedbackDecision, ClipFeedbackReason, ClipLanguage, JobListItem, JobView, UiClipEdit, UiSentence } from "../src/types.ts";
 import type { ModeName, ModeProfile } from "../src/modes.ts";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -35,8 +35,15 @@ export async function uploadVideo(file: File, faceTracking: boolean, language: C
   return result.job;
 }
 
-export async function getJob(id: string): Promise<{ job: JobView; edits: Record<string, UiClipEdit> }> {
+export async function getJob(id: string): Promise<{ job: JobView; edits: Record<string, UiClipEdit>; feedback: Record<string, ClipFeedback> }> {
   return await request(`/jobs/${encodeURIComponent(id)}`);
+}
+
+export async function saveClipFeedback(jobId: string, clipId: string, decision: ClipFeedbackDecision, reason?: ClipFeedbackReason): Promise<void> {
+  await request(`/jobs/${encodeURIComponent(jobId)}/clips/${encodeURIComponent(clipId)}/feedback`, {
+    method: "PUT", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ decision, ...(reason ? { reason } : {}) }),
+  });
 }
 
 export async function getTranscript(id: string): Promise<UiSentence[]> {

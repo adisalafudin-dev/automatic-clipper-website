@@ -68,5 +68,13 @@ export type UiClipEdit = {
   renderedAt?: string;
 };
 
+export type ClipFeedbackDecision = "post" | "skip";
+export type ClipFeedbackReason = "weak_hook" | "missing_context" | "weak_payoff" | "transcript_error";
+export type ClipFeedback = {
+  decision: ClipFeedbackDecision;
+  reason?: ClipFeedbackReason;
+  updatedAt: string;
+};
+
 export type UiWord = { text: string; start: number; end: number; wordIndex?: number };
 export type UiSentence = { id: number; text: string; start: number; end: number; words: UiWord[] };

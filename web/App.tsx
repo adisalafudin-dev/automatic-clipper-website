@@ -52,7 +52,7 @@ export function App() {
     try {
       const job = await uploadVideo(file, faceTracking, "auto", mode, mode === "gaming" ? facecamRect : undefined, projectName);
       setSelectedId(job.id);
-      setSelectedJob({ job, edits: {} });
+      setSelectedJob({ job, edits: {}, feedback: {} });
       setFile(null);
       setProjectName("");
       await refresh();

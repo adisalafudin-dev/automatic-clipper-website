@@ -1,23 +1,22 @@
 # Progress
 
-Phase: TRANSCRIPTION FIX | Branch: main
+Phase: LOCAL CLIP FEEDBACK | Branch: main
 
 ## Done
 
-- Enabled Silero VAD, non-speech suppression, no-fallback decoding, and disabled text context; VAD model is checksum-verified.
-- Mapped VAD-compressed token offsets back to source-audio time and filtered empty/invalid tokens.
-- Reprocessed `potongan_3_1`: valid Indonesian transcript grew from 157 to 2,819 words; “Kau bisa?” repeats fell from 78 to 0.
-- Timestamps are monotonic and within the 1,799.99-second audio; preserved original cache under ignored `data/vad-check/`.
-- `bun run check`: 83 tests pass, 300 assertions.
+- Added editor buttons to mark clips “Layak diposting” or “Lewati”, with optional skip reasons.
+- Feedback is validated and saved per job to local `feedback.json`; it never calls 9Router.
+- Clip deletion also removes its saved feedback.
+- Rebuilt the Docker app and confirmed health plus the local feedback field.
+- API tests cover both decisions, local persistence, invalid reasons, and cleanup; `bun run check`: 83 tests pass, 308 assertions.
 
 ## Next
 
-- Retry clip selection in the local UI with the corrected cached transcript; 9Router retry awaits approval.
+- Label real generated clips locally to start measuring the acceptance rate.
 
 ## Known bugs / open questions
 
 - Whisper can still repeat words over music or speech-like audio; no generic repeat removal was added.
-- Docker daemon was unavailable to this session; the entrypoint VAD download/checksum path was not container-tested.
 
 ## Run
 

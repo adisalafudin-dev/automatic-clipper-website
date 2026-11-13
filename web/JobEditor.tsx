@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { JobView, UiClipEdit, UiSentence } from "../src/types.ts";
-import { createClip, getTranscript, removeClip, renderClip, renderStale, retryJob, saveClipEdit } from "./api.ts";
+import type { ClipFeedback, ClipFeedbackDecision, ClipFeedbackReason, JobView, UiClipEdit, UiSentence } from "../src/types.ts";
+import { createClip, getTranscript, removeClip, renderClip, renderStale, retryJob, saveClipEdit, saveClipFeedback } from "./api.ts";
 import { clampRange, durationWarning, formatTime, parseTime, sentenceSelectionRange, snapRangeToWords, type TimeRange } from "./lib/trim.ts";
 
-type JobDetail = { job: JobView; edits: Record<string, UiClipEdit> };
+type JobDetail = { job: JobView; edits: Record<string, UiClipEdit>; feedback: Record<string, ClipFeedback> };
 type Props = { detail: JobDetail; onEditSaved: () => Promise<void> };
 
 const clock = (ms: number) => formatTime(ms).slice(0, -4);
@@ -16,6 +16,7 @@ export function JobEditor({ detail, onEditSaved }: Props) {
   const [loop, setLoop] = useState(false);
   const [playhead, setPlayhead] = useState(0);
   const [loadError, setLoadError] = useState("");
+  const [feedbackStatus, setFeedbackStatus] = useState("");
   const [range, setRange] = useState<TimeRange>({ startMs: clips[0]?.start ?? 0, endMs: clips[0]?.end ?? 0 });
   const [snap, setSnap] = useState(true);
   const [saveState, setSaveState] = useState("Saved");
@@ -54,6 +55,7 @@ export function JobEditor({ detail, onEditSaved }: Props) {
     if (!video || !selected) return;
     video.pause();
     const savedEdit = detail.edits[selected.id];
+    setFeedbackStatus("");
     const savedRange = { startMs: savedEdit?.startMs ?? selected.start, endMs: savedEdit?.endMs ?? selected.end };
     setRange(savedRange);
     setStartText(formatTime(savedRange.startMs));
@@ -126,6 +128,7 @@ export function JobEditor({ detail, onEditSaved }: Props) {
   const videoUrl = `/jobs/${encodeURIComponent(job.id)}/source`;
   const warning = durationWarning(range);
   const renderStatus = selected ? detail.edits[selected.id]?.renderStatus ?? "done" : "none";
+  const selectedFeedback = selected ? detail.feedback[selected.id] : undefined;
   const windowStart = Math.max(0, range.startMs - 30_000);
   const windowEnd = Math.min(sourceDuration, range.endMs + 30_000);
   const windowSpan = Math.max(1, windowEnd - windowStart);
@@ -162,6 +165,17 @@ export function JobEditor({ detail, onEditSaved }: Props) {
       await onEditSaved();
     } catch (reason) {
       setLoadError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+  const saveFeedback = async (decision: ClipFeedbackDecision, reason?: ClipFeedbackReason) => {
+    if (!selected) return;
+    setFeedbackStatus("Menyimpan...");
+    try {
+      await saveClipFeedback(job.id, selected.id, decision, reason);
+      setFeedbackStatus("Tersimpan lokal");
+      await onEditSaved();
+    } catch (reason: unknown) {
+      setFeedbackStatus(reason instanceof Error ? reason.message : String(reason));
     }
   };
   const deleteSelectedClip = async () => {
@@ -204,6 +218,23 @@ export function JobEditor({ detail, onEditSaved }: Props) {
           <div className="range-wrap"><input aria-label="Clip start range" type="range" min="0" max={windowSpan} step="100" value={Math.min(windowSpan, Math.max(0, range.startMs - windowStart))} onChange={(event) => updateRange({ ...range, startMs: windowStart + Number(event.currentTarget.value) })} /><input aria-label="Clip end range" type="range" min="0" max={windowSpan} step="100" value={Math.min(windowSpan, Math.max(0, range.endMs - windowStart))} onChange={(event) => updateRange({ ...range, endMs: windowStart + Number(event.currentTarget.value) })} /></div>
           <div className="trim-actions"><button onClick={() => updateRange({ ...range, startMs: playhead })}>Start = playhead</button><button onClick={() => updateRange({ ...range, endMs: playhead })}>End = playhead</button><button onClick={() => updateRange({ ...range, startMs: range.startMs - 100 })}>Start −100 ms</button><button onClick={() => updateRange({ ...range, startMs: range.startMs + 100 })}>Start +100 ms</button><button onClick={() => updateRange({ ...range, endMs: range.endMs - 100 })}>End −100 ms</button><button onClick={() => updateRange({ ...range, endMs: range.endMs + 100 })}>End +100 ms</button><button onClick={() => { if (videoRef.current) videoRef.current.currentTime = range.startMs / 1000; }}>Jump to start</button><button onClick={() => { if (videoRef.current) videoRef.current.currentTime = range.endMs / 1000; }}>Jump to end</button><button onClick={() => updateRange({ startMs: detail.edits[selected.id]?.origStartMs ?? selected.start, endMs: detail.edits[selected.id]?.origEndMs ?? selected.end })}>Reset</button><label><input type="checkbox" checked={snap} onChange={(event) => setSnap(event.currentTarget.checked)} /> Snap to words</label></div>
           <p className="trim-status">Duration {formatTime(range.endMs - range.startMs)} · {saveState}{warning && <span className="warning"> · Outside 30–90 sec</span>}</p>
+          <section className="clip-feedback" aria-label="Penilaian klip">
+            <div><h4>Penilaian klip</h4><span>Disimpan di komputer ini</span></div>
+            <div className="feedback-actions">
+              <button type="button" className={selectedFeedback?.decision === "post" ? "active" : ""} aria-pressed={selectedFeedback?.decision === "post"} onClick={() => void saveFeedback("post")}>Layak diposting</button>
+              <button type="button" className={selectedFeedback?.decision === "skip" ? "active" : ""} aria-pressed={selectedFeedback?.decision === "skip"} onClick={() => void saveFeedback("skip")}>Lewati</button>
+            </div>
+            {selectedFeedback?.decision === "skip" && <label className="feedback-reason">Alasan (opsional)
+              <select value={selectedFeedback.reason ?? ""} onChange={(event) => void saveFeedback("skip", (event.currentTarget.value || undefined) as ClipFeedbackReason | undefined)}>
+                <option value="">Pilih alasan</option>
+                <option value="weak_hook">Hook lemah</option>
+                <option value="missing_context">Kurang konteks</option>
+                <option value="weak_payoff">Payoff kurang jelas</option>
+                <option value="transcript_error">Transcript salah</option>
+              </select>
+            </label>}
+            <p role="status">{feedbackStatus || (selectedFeedback ? "Penilaian tersimpan lokal." : "Belum dinilai. Penilaian tidak dikirim ke 9Router.")}</p>
+          </section>
           <div className="render-controls"><button className="button primary" disabled={job.status === "running" || job.status === "queued" || renderStatus === "queued" || renderStatus === "rendering"} onClick={() => void renderClip(job.id, selected.id).then(onEditSaved).catch((reason: unknown) => setLoadError(reason instanceof Error ? reason.message : String(reason)))}>{renderStatus === "queued" || renderStatus === "rendering" ? "Rendering…" : renderStatus === "done" ? "Render again" : "Render clip"}</button><span className={`badge ${renderStatus}`}>{renderStatus}</span><button className="button danger" disabled={job.status === "running" || job.status === "queued"} onClick={() => void deleteSelectedClip()}>Delete clip</button></div>
           {detail.edits[selected.id]?.renderError && <p className="error" role="alert">{detail.edits[selected.id]!.renderError}</p>}
           {renderStatus === "done" && <div className="rendered-result"><h4>Rendered clip</h4><video controls preload="metadata" src={`/jobs/${encodeURIComponent(job.id)}/clips/${encodeURIComponent(selected.id)}/file`} /><a href={`/jobs/${encodeURIComponent(job.id)}/clips/${encodeURIComponent(selected.id)}/file`} download={`${selected.id}.mp4`}>Download clip</a></div>}
