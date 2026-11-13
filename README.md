@@ -23,7 +23,7 @@ bun run check
 bun run start
 ```
 
-Open <http://127.0.0.1:3000>. The server binds to localhost by default. Choose English or Bahasa Indonesia for each upload, then upload a video up to 2 GB. The selected language controls Whisper transcription and the language used for candidate hooks and titles. Select the job under **Recent projects** to preview clips. Adjust a clip’s start/end or captions, then choose **Render changes**. Caption presets are Classic, Bold, and Clean; layouts include center crop, blurred background, and stacked panels. The hook-title overlay is optional.
+Open <http://127.0.0.1:3000>. The server binds to localhost by default. Choose English or Bahasa Indonesia and a content mode for each upload, then upload a video up to 2 GB. The selected language controls Whisper transcription and the language used for candidate hooks and titles; the selected mode is saved with the job and manifest. Available modes are Default, Gaming, and Podcast. Select the job under **Recent projects** to preview clips. Adjust a clip’s start/end or captions, then choose **Render changes**. Caption presets are Classic, Bold, and Clean; layouts include center crop, blurred background, and stacked panels. The hook-title overlay is optional.
 
 To change the address, set `HOST` or `PORT` before running `bun run start`. Restart the server after updating code or configuration.
 
@@ -31,7 +31,7 @@ To change the address, set `HOST` or `PORT` before running `bun run start`. Rest
 
 ```powershell
 bun run src/cli.ts path\to\video.mp4
-bun run src/cli.ts path\to\video.mp4 --force
+bun run src/cli.ts path\to\video.mp4 --force --mode gaming
 ```
 
 Audio, Whisper output, transcript, candidates, captions, clips, and `clips.json` are cached under `data/jobs/<video-name>`. `--force` reruns cached stages. For optional face tracking, first run `bun run download-face-model`, then add `--face-track`. Face tracking samples every five seconds on the CPU; center crop remains the default and is used as a fallback.

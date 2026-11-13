@@ -1,4 +1,5 @@
 import type { ClipLanguage, JobListItem, JobView, UiClipEdit, UiSentence } from "../src/types.ts";
+import type { ModeName, ModeProfile } from "../src/modes.ts";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
@@ -18,11 +19,16 @@ export async function getJobs(): Promise<JobListItem[]> {
   return result.jobs;
 }
 
-export async function uploadVideo(file: File, faceTracking: boolean, language: ClipLanguage): Promise<JobView> {
+export async function getModes(): Promise<ModeProfile[]> {
+  return await request<ModeProfile[]>("/modes");
+}
+
+export async function uploadVideo(file: File, faceTracking: boolean, language: ClipLanguage, mode: ModeName): Promise<JobView> {
   const form = new FormData();
   form.set("video", file);
   form.set("faceTracking", String(faceTracking));
   form.set("language", language);
+  form.set("mode", mode);
   const result = await request<{ job: JobView }>("/jobs", { method: "POST", body: form });
   return result.job;
 }

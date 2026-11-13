@@ -2,6 +2,7 @@ import type { Database, SQLQueryBindings } from "bun:sqlite";
 import type { ClipsManifest } from "../pipeline/render.ts";
 import { PIPELINE_STAGES, type PipelineStage } from "../pipeline/run.ts";
 import type { ClipLanguage } from "../types.ts";
+import type { ModeName } from "../modes.ts";
 
 export type JobStatus = "queued" | "running" | "completed" | "failed";
 export type StageStatus = "pending" | "running" | "completed" | "failed";
@@ -18,6 +19,7 @@ export type Job = {
   videoPath: string;
   faceTracking: boolean;
   language: ClipLanguage;
+  mode: ModeName;
   status: JobStatus;
   stage: string;
   progress: number;
@@ -33,6 +35,7 @@ type JobRow = {
   video_path: string;
   face_tracking: number;
   language: ClipLanguage;
+  mode: ModeName;
   status: JobStatus;
   stage: string;
   progress: number;
@@ -56,6 +59,7 @@ function fromRow(row: JobRow): Job {
     videoPath: row.video_path,
     faceTracking: row.face_tracking === 1,
     language: row.language,
+    mode: row.mode,
     status: row.status,
     stage: row.stage,
     progress: row.progress,
@@ -75,6 +79,7 @@ export class JobStore {
         video_path TEXT NOT NULL,
         face_tracking INTEGER NOT NULL DEFAULT 0,
         language TEXT NOT NULL DEFAULT 'en',
+        mode TEXT NOT NULL DEFAULT 'default',
         status TEXT NOT NULL CHECK (status IN ('queued','running','completed','failed')),
         stage TEXT NOT NULL,
         progress INTEGER NOT NULL DEFAULT 0,
@@ -93,15 +98,18 @@ export class JobStore {
     if (!columns.some((column) => column.name === "language")) {
       db.exec("ALTER TABLE jobs ADD COLUMN language TEXT NOT NULL DEFAULT 'en'");
     }
+    if (!columns.some((column) => column.name === "mode")) {
+      db.exec("ALTER TABLE jobs ADD COLUMN mode TEXT NOT NULL DEFAULT 'default'");
+    }
   }
 
-  create(id: string, videoPath: string, faceTracking = false, language: ClipLanguage = "en"): Job {
+  create(id: string, videoPath: string, faceTracking = false, language: ClipLanguage = "en", mode: ModeName = "default"): Job {
     const now = new Date().toISOString();
     const stages = initialStages();
     this.db.query(`
-      INSERT INTO jobs (id, video_path, face_tracking, language, status, stage, progress, stages_json, created_at, updated_at)
-      VALUES (?, ?, ?, ?, 'queued', 'queued', 0, ?, ?, ?)
-    `).run(id, videoPath, faceTracking ? 1 : 0, language, JSON.stringify(stages), now, now);
+      INSERT INTO jobs (id, video_path, face_tracking, language, mode, status, stage, progress, stages_json, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, 'queued', 'queued', 0, ?, ?, ?)
+    `).run(id, videoPath, faceTracking ? 1 : 0, language, mode, JSON.stringify(stages), now, now);
     return this.get(id)!;
   }
 

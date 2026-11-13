@@ -1,3 +1,5 @@
+import type { ModeName } from "./modes.ts";
+
 // The parts of whisper-cli's -ojf JSON that we use. Times are in milliseconds.
 export type WhisperToken = {
   text: string;
@@ -28,6 +30,7 @@ export type JobListItem = {
   id: string;
   filename: string;
   language: ClipLanguage;
+  mode: ModeName;
   status: "queued" | "running" | "completed" | "failed";
   stage: string;
   progress: number;

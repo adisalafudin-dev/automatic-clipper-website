@@ -8,6 +8,7 @@ import type { ClipRenderEdit } from "./pipeline/render.ts";
 import type { ClipLanguage, Transcript } from "./types.ts";
 import { transcriptSentences } from "./pipeline/sentences.ts";
 import { configuredClipLanguage, isClipLanguage } from "./languages.ts";
+import { getMode, listModes, type ModeName } from "./modes.ts";
 
 const MAX_UPLOAD_BYTES = 2_000_000_000;
 
@@ -55,11 +56,16 @@ export function createJobApi(
         return json({ status: "ok" });
       }
 
+      if (url.pathname === "/modes" && request.method === "GET") {
+        return json(listModes());
+      }
+
       if (url.pathname === "/jobs" && request.method === "POST") {
         let videoPath: string;
         let force = false;
         let faceTracking = request.headers.get("x-face-tracking") === "true";
         let languageInput: unknown = configuredClipLanguage(process.env.WHISPER_LANG);
+        let modeInput: unknown;
         const contentType = request.headers.get("content-type") ?? "";
         let uploadName: string | undefined;
         let uploadBody: ReadableStream<Uint8Array> | null = null;
@@ -72,6 +78,7 @@ export function createJobApi(
             uploadFile = entry instanceof File ? entry : null;
             faceTracking = form.get("faceTracking") === "true";
             languageInput = form.get("language") ?? languageInput;
+            modeInput = form.get("mode") ?? undefined;
           } catch {
             return json({ error: "Upload must be valid multipart form data" }, 400);
           }
@@ -88,6 +95,7 @@ export function createJobApi(
           }
           if (!uploadName) return json({ error: "x-video-filename is required" }, 400);
           languageInput = request.headers.get("x-language") ?? languageInput;
+          modeInput = request.headers.get("x-mode") ?? undefined;
           uploadBody = request.body;
           if (!uploadBody) return json({ error: "Video upload body is empty" }, 400);
           const contentLength = Number(request.headers.get("content-length") ?? "0");
@@ -145,6 +153,7 @@ export function createJobApi(
             return json({ error: "faceTracking must be a boolean" }, 400);
           }
           languageInput = payload.language ?? languageInput;
+          if (Object.hasOwn(payload, "mode")) modeInput = payload.mode;
           faceTracking = payload.faceTracking === true;
           videoPath = path.resolve(payload.videoPath.trim());
           force = payload.force === true;
@@ -157,10 +166,19 @@ export function createJobApi(
           return json({ error: "language must be 'en' or 'id'" }, 400);
         }
         const language: ClipLanguage = languageInput;
+        if (modeInput !== undefined && typeof modeInput !== "string") {
+          return json({ error: "mode must be a string" }, 400);
+        }
+        let mode: ModeName;
+        try {
+          mode = getMode(modeInput).name as ModeName;
+        } catch (error) {
+          return json({ error: error instanceof Error ? error.message : String(error) }, 400);
+        }
 
         const id = randomUUID();
-        const job = store.create(id, videoPath, faceTracking, language);
-        queue.enqueue({ id, videoPath, force, faceTracking, language });
+        const job = store.create(id, videoPath, faceTracking, language, mode);
+        queue.enqueue({ id, videoPath, force, faceTracking, language, mode });
         return json({ job }, 202, { location: `/jobs/${id}` });
       }
 
@@ -328,7 +346,7 @@ export function createJobApi(
         edits[clipId] = { ...edits[clipId], renderStatus: "queued", renderError: undefined };
         await writeFile(path.join(jobDir, "edits.json"), JSON.stringify(edits, null, 2));
         store.requeue(jobId);
-        queue.enqueue({ id: jobId, videoPath: job.videoPath, force: true, operation: "render", faceTracking: job.faceTracking, clipId });
+        queue.enqueue({ id: jobId, videoPath: job.videoPath, force: true, operation: "render", faceTracking: job.faceTracking, clipId, mode: job.mode });
         return json({ job: store.get(jobId) }, 202);
       }
 
@@ -429,7 +447,7 @@ export function createJobApi(
         }
         await writeFile(path.join(jobDir, "edits.json"), JSON.stringify(edits, null, 2));
         store.requeue(jobId);
-        queue.enqueue({ id: jobId, videoPath: job.videoPath, force: true, operation: "render", faceTracking: job.faceTracking, onlyStale: true });
+        queue.enqueue({ id: jobId, videoPath: job.videoPath, force: true, operation: "render", faceTracking: job.faceTracking, onlyStale: true, mode: job.mode });
         return json({ job: store.get(jobId) }, 202);
       }
 

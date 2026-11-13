@@ -45,6 +45,10 @@ test("HTTP API accepts jobs, exposes persisted stage progress, and returns resul
     expect(health.status).toBe(200);
     expect(await health.json()).toEqual({ status: "ok" });
 
+    const modes = await fetch(`${baseUrl}/modes`);
+    expect(modes.status).toBe(200);
+    expect((await modes.json() as Array<{ name: string }>).map((mode) => mode.name)).toEqual(["default", "gaming", "podcast"]);
+
     const invalid = await fetch(`${baseUrl}/jobs`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -279,10 +283,13 @@ test("browser upload supports preview, trim and caption edits, and queued rerend
   };
   let renderCount = 0;
   let faceTrackingRequested = false;
+  let pipelineMode = "";
   let rerenderFaceTracking = false;
   let rerenderOnlyStale = false;
+  let rerenderMode = "";
   const queue = new JobQueue(store, async (videoPath, jobDir, _force, _report, options) => {
     faceTrackingRequested = options.faceTracking === true;
+    pipelineMode = options.mode ?? "";
     await mkdir(path.join(jobDir, "clips"), { recursive: true });
     await Bun.write(path.join(jobDir, "transcript.json"), JSON.stringify({
       model: "fixture", language: "en", words: [{ text: "hello", start: 0, end: 35_000 }],
@@ -293,10 +300,11 @@ test("browser upload supports preview, trim and caption edits, and queued rerend
     }]));
     await Bun.write(path.join(jobDir, clip.file), "fixture clip");
     return { ...result, manifest: { ...result.manifest, source: videoPath } };
-  }, async (videoPath, _jobDir, report, faceTracking, _clipId, onlyStale) => {
+  }, async (videoPath, _jobDir, report, faceTracking, _clipId, onlyStale, mode) => {
     renderCount++;
     rerenderFaceTracking = faceTracking;
     rerenderOnlyStale = onlyStale === true;
+    rerenderMode = mode ?? "";
     report("rendering", 0);
     await Bun.sleep(10);
     report("rendering", 100);
@@ -314,13 +322,16 @@ test("browser upload supports preview, trim and caption edits, and queued rerend
         "content-type": "application/octet-stream",
         "x-video-filename": "uploaded.mp4",
         "x-face-tracking": "true",
+        "x-mode": "gaming",
       },
       body: new File(["source video"], "uploaded.mp4", { type: "video/mp4" }),
     });
     expect(upload.status).toBe(202);
-    const { job: created } = await upload.json() as { job: { id: string; videoPath: string } };
+    const { job: created } = await upload.json() as { job: { id: string; videoPath: string; mode: string } };
     await waitForStatus(baseUrl, created.id, "completed");
     expect(store.get(created.id)!.faceTracking).toBe(true);
+    expect(created.mode).toBe("gaming");
+    expect(pipelineMode).toBe("gaming");
     expect(faceTrackingRequested).toBe(true);
     expect(await Bun.file(created.videoPath).text()).toBe("source video");
 
@@ -365,8 +376,10 @@ test("browser upload supports preview, trim and caption edits, and queued rerend
     expect(renderCount).toBe(1);
     expect(rerenderFaceTracking).toBe(true);
     expect(rerenderOnlyStale).toBe(true);
+    expect(rerenderMode).toBe("gaming");
     const updated = store.get(created.id)!;
     expect(updated.result?.clips).toHaveLength(1);
+    expect(updated.result?.mode).toBe("gaming");
   } finally {
     server.stop?.();
     db.close();
@@ -412,8 +425,10 @@ test("multipart uploads from an already-open Phase 6 browser still work", async 
   const db = new Database(":memory:");
   const store = new JobStore(db);
   let pipelineLanguage = "";
+  let pipelineMode = "";
   const queue = new JobQueue(store, async (_videoPath, _jobDir, _force, _report, options) => {
     pipelineLanguage = options.language ?? "";
+    pipelineMode = options.mode ?? "";
     return fixtureResult();
   });
   const app = createJobApi(store, queue, { uploadDir: path.join(temp, "uploads"), jobRoot: path.join(temp, "jobs") });
@@ -423,17 +438,24 @@ test("multipart uploads from an already-open Phase 6 browser still work", async 
     form.set("video", new File(["legacy browser upload"], "small.mp4", { type: "video/mp4" }));
     form.set("faceTracking", "false");
     form.set("language", "id");
+    form.set("mode", "podcast");
     const response = await fetch(`http://127.0.0.1:${server.port}/jobs`, { method: "POST", body: form });
     expect(response.status).toBe(202);
-    const { job } = await response.json() as { job: { id: string; videoPath: string; language: string } };
+    const { job } = await response.json() as { job: { id: string; videoPath: string; language: string; mode: string } };
     expect(job.language).toBe("id");
+    expect(job.mode).toBe("podcast");
     expect(await Bun.file(job.videoPath).text()).toBe("legacy browser upload");
     await waitForStatus(`http://127.0.0.1:${server.port}`, job.id, "completed");
     expect(pipelineLanguage).toBe("id");
+    expect(pipelineMode).toBe("podcast");
 
     form.set("language", "fr");
     const invalidLanguage = await fetch(`http://127.0.0.1:${server.port}/jobs`, { method: "POST", body: form });
     expect(invalidLanguage.status).toBe(400);
+    form.set("language", "id");
+    form.set("mode", "constructor");
+    const invalidMode = await fetch(`http://127.0.0.1:${server.port}/jobs`, { method: "POST", body: form });
+    expect(invalidMode.status).toBe(400);
   } finally {
     server.stop?.();
     db.close();

@@ -5,6 +5,7 @@ import { renderClips, type ClipRenderEdit } from "../pipeline/render.ts";
 import type { Transcript } from "../types.ts";
 import type { ClipCandidate } from "../pipeline/candidates.ts";
 import { JobStore } from "./jobs.ts";
+import type { ModeName } from "../modes.ts";
 
 export type PipelineRunner = (
   videoPath: string,
@@ -21,13 +22,14 @@ type QueueItem = {
   operation?: "pipeline" | "render";
   faceTracking?: boolean;
   language?: string;
+  mode?: ModeName;
   clipId?: string;
   onlyStale?: boolean;
 };
 
-type RenderRunner = (videoPath: string, jobDir: string, report: PipelineProgress, faceTracking: boolean, clipId?: string, onlyStale?: boolean) => Promise<PipelineResult>;
+type RenderRunner = (videoPath: string, jobDir: string, report: PipelineProgress, faceTracking: boolean, clipId?: string, onlyStale?: boolean, mode?: ModeName) => Promise<PipelineResult>;
 
-async function renderExisting(videoPath: string, jobDir: string, report: PipelineProgress, faceTracking: boolean, clipId?: string, onlyStale = false): Promise<PipelineResult> {
+async function renderExisting(videoPath: string, jobDir: string, report: PipelineProgress, faceTracking: boolean, clipId?: string, onlyStale = false, mode: ModeName = "default"): Promise<PipelineResult> {
   report("rendering", 0);
   const transcript = JSON.parse(await readFile(path.join(jobDir, "transcript.json"), "utf8")) as Transcript;
   const storedCandidates = JSON.parse(await readFile(path.join(jobDir, "candidates.json"), "utf8")) as ClipCandidate[];
@@ -56,7 +58,9 @@ async function renderExisting(videoPath: string, jobDir: string, report: Pipelin
     }
   }
   if (clipId && !selected.length) throw new Error(`Clip ${clipId} is missing its candidate data`);
-  const manifest = await renderClips(videoPath, jobDir, transcript, selected, true, edits, faceTracking);
+  const renderedManifest = await renderClips(videoPath, jobDir, transcript, selected, true, edits, faceTracking);
+  const manifest = { ...renderedManifest, mode };
+  await Bun.write(path.join(jobDir, "clips.json"), JSON.stringify(manifest, null, 2));
   report("rendering", 100);
   return { manifest, transcriptWords: transcript.words.length, candidateCount: candidates.length };
 }
@@ -94,19 +98,36 @@ export class JobQueue {
             : [];
           activeRenderIds = renderIds;
           if (renderIds.length) await updateRenderStatus(jobDir, renderIds, "rendering");
-          const result = item.operation === "render"
-            ? await this.renderer(item.videoPath, jobDir, report, item.faceTracking === true, item.clipId, item.onlyStale)
-            : await this.pipeline(item.videoPath, jobDir, item.force, report, {
+          let result: PipelineResult;
+          if (item.operation === "render") {
+            const rendered = await this.renderer(
+              item.videoPath,
+              jobDir,
+              report,
+              item.faceTracking === true,
+              item.clipId,
+              item.onlyStale,
+              item.mode,
+            );
+            const manifest = { ...rendered.manifest, mode: item.mode ?? "default" };
+            await Bun.write(path.join(jobDir, "clips.json"), JSON.stringify(manifest, null, 2));
+            result = { ...rendered, manifest };
+          } else {
+            result = await this.pipeline(item.videoPath, jobDir, item.force, report, {
               faceTracking: item.faceTracking === true,
               language: item.language,
+              mode: item.mode,
             });
+          }
           if (renderIds.length) await updateRenderStatus(jobDir, result.manifest.clips.map((clip) => clip.id), "done");
           if (item.clipId || item.onlyStale) {
             const current = this.store.get(item.id)?.result;
             if (!current || (item.clipId && !result.manifest.clips[0])) throw new Error(`Clip ${item.clipId ?? "stale"} render result could not be merged`);
             const updatedById = new Map(result.manifest.clips.map((clip) => [clip.id, clip]));
             const clips = current.clips.map((clip) => updatedById.get(clip.id) ?? clip);
-            this.store.complete(item.id, { ...current, clips });
+            const manifest = { ...current, mode: item.mode ?? current.mode ?? "default", clips };
+            await Bun.write(path.join(jobDir, "clips.json"), JSON.stringify(manifest, null, 2));
+            this.store.complete(item.id, manifest);
           } else this.store.complete(item.id, result.manifest);
         } catch (error) {
           if (item.operation === "render") {

@@ -21,10 +21,11 @@ Phase: 9 | Branch: phase-9-content-modes
 - Phase 8 follow-up: upload language can be English or Bahasa Indonesia; the choice is persisted per job, passed to Whisper, and used for hook/title/reason language.
 - Phase 9.1: added immutable default, gaming, and podcast profiles with default lookup, ordered listing, and explicit invalid-name errors.
 - Phase 9.2: added `--mode`, persisted the selected mode in `job.json` and `clips.json`, and reused the saved mode unless explicitly overridden.
+- Phase 9.3: added `GET /modes`, per-job SQLite mode selection, upload UI dropdown, and mode propagation through rerenders.
 
 ## Next
 
-- Phase 9.3: expose modes through the API and upload UI, persist them in SQLite, and reuse the saved mode for rerender/retry.
+- Phase 9.4: add the gaming split layout and configurable facecam rectangle through FFmpeg filter graph, CLI, and UI.
 
 ## Known bugs / open questions
 

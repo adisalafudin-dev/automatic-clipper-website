@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { ClipLanguage, JobListItem } from "../src/types.ts";
-import { getJob, getJobs, uploadVideo } from "./api.ts";
+import type { ModeName, ModeProfile } from "../src/modes.ts";
+import { getJob, getJobs, getModes, uploadVideo } from "./api.ts";
 import { JobEditor } from "./JobEditor.tsx";
 
 export function App() {
@@ -12,6 +13,8 @@ export function App() {
   const [file, setFile] = useState<File | null>(null);
   const [faceTracking, setFaceTracking] = useState(false);
   const [language, setLanguage] = useState<ClipLanguage>("en");
+  const [mode, setMode] = useState<ModeName>("default");
+  const [modes, setModes] = useState<ModeProfile[]>([]);
   const [uploading, setUploading] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -32,6 +35,9 @@ export function App() {
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
+    void getModes().then(setModes).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason)));
+  }, []);
+  useEffect(() => {
     if (!jobs.some((job) => job.status === "queued" || job.status === "running")) return;
     const timer = window.setInterval(() => void refresh(), 2_000);
     return () => window.clearInterval(timer);
@@ -43,7 +49,7 @@ export function App() {
     setUploading(true);
     setError("");
     try {
-      const job = await uploadVideo(file, faceTracking, language);
+      const job = await uploadVideo(file, faceTracking, language, mode);
       setSelectedId(job.id);
       setSelectedJob({ job, edits: {} });
       setFile(null);
@@ -62,12 +68,13 @@ export function App() {
       <form className="upload-row" onSubmit={(event) => void submitUpload(event)}>
         <label className="file-picker">{file ? file.name : "Choose a video (MP4, MOV, MKV, WEBM)"}<input key={file?.name ?? "empty"} type="file" accept="video/mp4,video/quicktime,video/x-matroska,video/webm,.m4v" onChange={(event) => setFile(event.currentTarget.files?.[0] ?? null)} /></label>
         <label className="language-option"><span>Video language</span><select value={language} onChange={(event) => setLanguage(event.currentTarget.value as ClipLanguage)}><option value="en">English</option><option value="id">Bahasa Indonesia</option></select></label>
+        <label className="language-option"><span>Mode</span><select value={mode} onChange={(event) => setMode(event.currentTarget.value as ModeName)}>{modes.map((item) => <option value={item.name} key={item.name}>{item.name}</option>)}</select></label>
         <label className="check-option"><input type="checkbox" checked={faceTracking} onChange={(event) => setFaceTracking(event.currentTarget.checked)} /> Track faces</label>
         <button className="button primary" type="submit" disabled={uploading}>{uploading ? "Uploading…" : "Upload video"}</button>
       </form>
       <div className="section-title"><div><p className="eyebrow">YOUR WORKSPACE</p><h2>Recent projects</h2></div><button className="button quiet" onClick={() => void refresh()}>Refresh</button></div>
       {error && <p className="error" role="alert">{error}</p>}
-      {loading ? <p className="muted">Loading projects…</p> : jobs.length === 0 ? <p className="muted">No projects yet. Upload a video to get started.</p> : <ul className="job-list">{jobs.map((job) => <li className={`job-row ${selectedId === job.id ? "selected" : ""}`} key={job.id} onClick={() => { setSelectedId(job.id); void getJob(job.id).then(setSelectedJob).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason))); }}><div className="job-info"><strong>{job.filename}</strong><span className="muted">{job.stage} · {job.progress}% · {job.language === "id" ? "Bahasa Indonesia" : "English"}</span><div className="progress-track"><div className="progress-fill" style={{ width: `${job.progress}%` }} /></div>{job.error && <span className="error">{job.error}</span>}</div><span className={`badge ${job.status}`}>{job.status}</span></li>)}</ul>}
+      {loading ? <p className="muted">Loading projects…</p> : jobs.length === 0 ? <p className="muted">No projects yet. Upload a video to get started.</p> : <ul className="job-list">{jobs.map((job) => <li className={`job-row ${selectedId === job.id ? "selected" : ""}`} key={job.id} onClick={() => { setSelectedId(job.id); void getJob(job.id).then(setSelectedJob).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason))); }}><div className="job-info"><strong>{job.filename}</strong><span className="muted">{job.stage} · {job.progress}% · {job.language === "id" ? "Bahasa Indonesia" : "English"} · {job.mode}</span><div className="progress-track"><div className="progress-fill" style={{ width: `${job.progress}%` }} /></div>{job.error && <span className="error">{job.error}</span>}</div><span className={`badge ${job.status}`}>{job.status}</span></li>)}</ul>}
       {selectedJob && <JobEditor detail={selectedJob} onEditSaved={refresh} />}
     </section>
     <footer>Videos stay on this computer · CPU rendering</footer>

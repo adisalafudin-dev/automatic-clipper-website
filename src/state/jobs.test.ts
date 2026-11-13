@@ -15,8 +15,10 @@ test("existing Phase 5 job databases migrate to store the face tracking setting"
     const job = store.create("face-track-job", "local-video.mp4", true);
     expect(job.faceTracking).toBe(true);
     expect(job.language).toBe("en");
+    expect(job.mode).toBe("default");
     expect(store.create("center-job", "local-video.mp4").faceTracking).toBe(false);
     expect(store.create("indonesian-job", "local-video.mp4", false, "id").language).toBe("id");
+    expect(store.create("gaming-job", "local-video.mp4", false, "en", "gaming").mode).toBe("gaming");
   } finally {
     db.close();
   }
