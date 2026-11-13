@@ -24,7 +24,8 @@ COPY tsconfig.json ./tsconfig.json
 COPY --from=whisper-build /build/whisper.cpp/build/bin/whisper-cli /usr/local/bin/whisper-cli
 COPY --from=whisper-build /build/whisper.cpp/build/bin/lib*.so* /usr/local/lib/
 COPY docker/entrypoint.sh /usr/local/bin/video-clipper-entrypoint
-RUN chmod +x /usr/local/bin/video-clipper-entrypoint \
+RUN sed -i 's/\r$//' /usr/local/bin/video-clipper-entrypoint \
+    && chmod +x /usr/local/bin/video-clipper-entrypoint \
     && ldconfig \
     && mkdir -p /app/data /models
 ENV HOST=0.0.0.0 \
