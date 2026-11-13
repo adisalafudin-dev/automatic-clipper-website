@@ -3,12 +3,15 @@ import { chunkSentences } from "./chunks.ts";
 import { parseCandidateResponse, rankAndMapCandidates, type ClipCandidate } from "./candidates.ts";
 import type { JsonGenerator } from "./llm.ts";
 import { transcriptSentences } from "./sentences.ts";
+import { combineScores } from "./audio-energy.ts";
 
 const SCHEMA = `{"candidates":[{"startSentenceId":0,"endSentenceId":1,"hook":"string","title":"string","score":0,"reason":"string"}]}`;
 
 export async function selectCandidates(
   transcript: Transcript,
   llm: JsonGenerator,
+  energyScores: Map<number, number> = new Map(),
+  audioWeight = 0,
 ): Promise<ClipCandidate[]> {
   const sentences = transcriptSentences(transcript);
   const chunks = chunkSentences(sentences);
@@ -72,7 +75,16 @@ export async function selectCandidates(
   }
 
   const pass2Started = performance.now();
-  const selected = rankAndMapCandidates(proposals, sentences);
+  const weighted = proposals.map((proposal) => {
+    if (audioWeight === 0 || energyScores.size === 0) return proposal;
+    const spanEnergy = sentences
+      .filter((sentence) => sentence.id >= proposal.startSentenceId && sentence.id <= proposal.endSentenceId)
+      .map((sentence) => energyScores.get(sentence.id))
+      .filter((score): score is number => score !== undefined);
+    const energy = spanEnergy.length ? spanEnergy.reduce((sum, score) => sum + score, 0) / spanEnergy.length : 0;
+    return { ...proposal, score: combineScores(proposal.score, energy, audioWeight) };
+  });
+  const selected = rankAndMapCandidates(weighted, sentences);
   console.log(`Pass 2 ranking: ${((performance.now() - pass2Started) / 1000).toFixed(2)}s`);
   return selected;
 }

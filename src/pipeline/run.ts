@@ -10,6 +10,8 @@ import type { ClipCandidate } from "./candidates.ts";
 import type { ModeName } from "../modes.ts";
 import { getMode, type FacecamRect } from "../modes.ts";
 import { readJobMetadata, resolveJobMode, saveJobMetadata } from "../job-metadata.ts";
+import { loadOrComputeAudioEnergy } from "./audio-energy.ts";
+import { transcriptSentences } from "./sentences.ts";
 
 export const PIPELINE_STAGES = [
   "audio_extraction",
@@ -65,12 +67,21 @@ export async function runPipeline(
   );
 
   const candidatesPath = path.join(jobDir, "candidates.json");
+  const profile = getMode(mode);
   const candidates: ClipCandidate[] = await timedStage("selection", async () => {
     if (!force && (await Bun.file(candidatesPath).exists())) {
       console.log(`Using cached candidates: ${candidatesPath}`);
       return (await Bun.file(candidatesPath).json()) as ClipCandidate[];
     }
-    const selected = await selectCandidates(transcript, new RouterClient());
+    const energy = profile.audioWeight > 0
+      ? await loadOrComputeAudioEnergy(wavPath, path.join(jobDir, "audio_energy.json"), transcriptSentences(transcript))
+      : [];
+    const selected = await selectCandidates(
+      transcript,
+      new RouterClient(),
+      new Map(energy.map((item) => [item.sentenceId, item.score])),
+      profile.audioWeight,
+    );
     await Bun.write(candidatesPath, JSON.stringify(selected, null, 2));
     return selected;
   });

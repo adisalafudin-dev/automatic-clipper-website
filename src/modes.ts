@@ -3,6 +3,7 @@ export type ModeProfile = {
   description: string;
   layout: "center-crop" | "split";
   facecamRect: FacecamRect;
+  audioWeight: number;
 };
 
 export type FacecamRect = { x: number; y: number; w: number; h: number };
@@ -25,18 +26,21 @@ export const MODES = Object.freeze({
     description: "Current general-purpose clip selection and rendering behavior.",
     layout: "center-crop",
     facecamRect: { x: 0.68, y: 0.04, w: 0.28, h: 0.28 },
+    audioWeight: 0,
   }),
   gaming: Object.freeze({
     name: "gaming",
     description: "Gaming streamer clips with energetic moments and game terminology.",
     layout: "split",
     facecamRect: { x: 0.68, y: 0.04, w: 0.28, h: 0.28 },
+    audioWeight: 0.3,
   }),
   podcast: Object.freeze({
     name: "podcast",
     description: "Conversation-focused clips with clean captions and context.",
     layout: "center-crop",
     facecamRect: { x: 0.68, y: 0.04, w: 0.28, h: 0.28 },
+    audioWeight: 0.1,
   }),
 } satisfies Record<string, ModeProfile>);
 
