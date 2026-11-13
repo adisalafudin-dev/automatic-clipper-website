@@ -8,6 +8,8 @@ export type WhisperToken = {
 
 export type WhisperSegment = {
   tokens: WhisperToken[];
+  offsets?: { from: number; to: number };
+  timestamps?: { from: string; to: string };
 };
 
 // One spoken word. start/end are milliseconds from the start of the audio.

@@ -66,3 +66,41 @@ test("a new segment starts a new word even without a leading space", () => {
     { text: "start", start: 300, end: 400 },
   ]);
 });
+
+test("drops empty segments, blank tokens, and invalid timestamps without shifting later times", () => {
+  const words = wordsFromSegments([
+    { tokens: [] },
+    { tokens: [tok("   ", 0, 50), tok("broken", Number.NaN, 100), tok("backwards", 100, 90)] },
+    { tokens: [tok(" Hello", 1_250, 1_600), tok("!", 1_600, 1_700)] },
+  ]);
+  expect(words).toEqual([{ text: "Hello!", start: 1_250, end: 1_700 }]);
+});
+
+test("ignores malformed tokens and keeps repeated spoken words", () => {
+  const words = wordsFromSegments([
+    { tokens: [tok(" yes", 100, 200), { text: "bad", offsets: { from: 300, to: 250 } } as never] },
+    { tokens: [tok(" yes", 400, 500)] },
+  ]);
+  expect(words).toEqual([
+    { text: "yes", start: 100, end: 200 },
+    { text: "yes", start: 400, end: 500 },
+  ]);
+});
+
+test("maps compacted VAD token offsets back onto the source audio timeline", () => {
+  // Captured from whisper.cpp -ojf with Silero VAD: segment JSON timestamps are
+  // remapped, but the token offsets remain on the compacted VAD timeline.
+  const words = wordsFromSegments([{
+    offsets: { from: 69_920, to: 72_230 },
+    timestamps: { from: "00:01:09,920", to: "00:01:12,230" },
+    tokens: [tok(" Nah", 42_230, 42_570), tok(",", 42_570, 42_800), tok(" oke", 43_380, 43_660)],
+  }], true);
+  expect(words).toEqual([
+    { text: "Nah,", start: 69_920, end: 70_490 },
+    { text: "oke", start: 71_070, end: 71_350 },
+  ]);
+});
+
+test("does not emit VAD words when source mapping metadata is missing", () => {
+  expect(wordsFromSegments([{ tokens: [tok(" hello", 100, 200)] }], true)).toEqual([]);
+});

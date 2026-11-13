@@ -4,23 +4,23 @@ Phase: TRANSCRIPTION FIX | Branch: main
 
 ## Done
 
-- Phase FIX restored automatic clip generation, language detection, and clear failure states.
-- Gaming split layout and face tracking were corrected; local project clips were rerendered and Docker is healthy.
-- Added a transcription-fix plan to AGENTS.md; implementation is next.
-- `bun run check`: 77 tests pass, 294 assertions.
+- Enabled Silero VAD, non-speech suppression, no-fallback decoding, and disabled text context; VAD model is checksum-verified.
+- Mapped VAD-compressed token offsets back to source-audio time and filtered empty/invalid tokens.
+- Reprocessed `potongan_3_1`: valid Indonesian transcript grew from 157 to 2,819 words; “Kau bisa?” repeats fell from 78 to 0.
+- Timestamps are monotonic and within the 1,799.99-second audio; preserved original cache under ignored `data/vad-check/`.
+- `bun run check`: 83 tests pass, 300 assertions.
 
 ## Next
 
-- Inspect Whisper hallucinations during silence, evaluate VAD, add pure-logic tests, and rerun a problematic transcript.
+- Retry clip selection in the local UI with the corrected cached transcript; 9Router retry awaits approval.
 
 ## Known bugs / open questions
 
-- Whisper `base` can repeat hallucinated phrases during silence; VAD mitigation is not implemented yet.
-- The local whisper.cpp checkout and `.vscode/` files are untracked local data and excluded from commits.
+- Whisper can still repeat words over music or speech-like audio; no generic repeat removal was added.
+- Docker daemon was unavailable to this session; the entrypoint VAD download/checksum path was not container-tested.
 
 ## Run
 
 - `bun run check`
 - `bun run start`
-- `bun run dev`
 - `docker compose up --build`

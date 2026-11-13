@@ -9,7 +9,8 @@
     "check": "bun run typecheck && bun run test",
     "dev": "bun --hot src/server.ts",
     "start": "bun run src/server.ts",
-    "download-face-model": "bun run src/vision/download-model.ts"
+    "download-face-model": "bun run src/vision/download-model.ts",
+    "download-vad-model": "bun run src/pipeline/download-vad-model.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",

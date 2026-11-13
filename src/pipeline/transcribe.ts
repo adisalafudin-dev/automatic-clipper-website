@@ -10,6 +10,26 @@ const DEFAULT_WHISPER_BIN = path.join(
   "whisper-cli.exe",
 );
 const DEFAULT_MODELS_DIR = path.join("tools", "whisper", "models");
+export const DEFAULT_VAD_MODEL_FILE = "ggml-silero-v6.2.0.bin";
+
+export type WhisperArgsOptions = {
+  whisperBin: string;
+  modelPath: string;
+  audioPath: string;
+  language: string;
+  outPrefix: string;
+  vadModelPath?: string;
+};
+
+export function buildWhisperArgs(options: WhisperArgsOptions): string[] {
+  const args = [options.whisperBin, "-m", options.modelPath, "-f", options.audioPath,
+    "-l", options.language, "-oj", "-ojf", "-of", options.outPrefix,
+    "-sns", "-nf", "-mc", "0"];
+  if (options.vadModelPath) args.push("--vad", "--vad-model", options.vadModelPath,
+    "--vad-threshold", "0.55", "--vad-min-speech-duration-ms", "250",
+    "--vad-min-silence-duration-ms", "300", "--vad-speech-pad-ms", "100");
+  return args;
+}
 
 // The parts of whisper's -ojf JSON that we read.
 type WhisperJson = {
@@ -33,6 +53,8 @@ export async function transcribe(
   const modelsDir = process.env.WHISPER_MODELS_DIR ?? DEFAULT_MODELS_DIR;
   const modelPath =
     process.env.WHISPER_MODEL_PATH || path.join(modelsDir, `ggml-${model}.bin`);
+  const vadEnabled = process.env.WHISPER_VAD !== "false";
+  const vadModelPath = process.env.WHISPER_VAD_MODEL_PATH || path.join(modelsDir, DEFAULT_VAD_MODEL_FILE);
   const transcriptPath = path.join(jobDir, "transcript.json");
 
   if (!force && (await Bun.file(transcriptPath).exists())) {
@@ -49,6 +71,9 @@ export async function transcribe(
       `Whisper model not found: ${modelPath} (WHISPER_MODEL="${model}")`,
     );
   }
+  if (vadEnabled && !(await Bun.file(vadModelPath).exists())) {
+    throw new Error(`Whisper VAD model not found: ${vadModelPath}. Run bun run download-vad-model or set WHISPER_VAD=false.`);
+  }
   if (!(await Bun.file(audioPath).exists())) {
     throw new Error(`Audio file not found: ${audioPath}`);
   }
@@ -56,19 +81,10 @@ export async function transcribe(
   // whisper adds ".json" itself, so this prefix produces <jobDir>/whisper.json
   const outPrefix = path.join(jobDir, "whisper");
 
-  const args = [
-    whisperBin,
-    "-m",
-    modelPath, // model file
-    "-f",
-    audioPath, // input WAV
-    "-l",
-    language, // spoken language
-    "-oj",
-    "-ojf", // write JSON, including per-token timestamps
-    "-of",
-    outPrefix, // output path without extension
-  ];
+  const args = buildWhisperArgs({
+    whisperBin, modelPath, audioPath, language, outPrefix,
+    ...(vadEnabled ? { vadModelPath } : {}),
+  });
 
   // whisper prints a lot to stderr, so we capture it and show it only on failure.
   const proc = Bun.spawn(args, { stdout: "ignore", stderr: "pipe", signal });
@@ -92,7 +108,7 @@ export async function transcribe(
   const transcript: Transcript = {
     model,
     language: raw.result.language,
-    words: wordsFromSegments(raw.transcription),
+    words: wordsFromSegments(raw.transcription, vadEnabled),
   };
 
   await Bun.write(

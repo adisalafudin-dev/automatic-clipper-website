@@ -73,3 +73,5 @@ Format: `date | decision | reason`
 
 2026-11-13 | Normalize the copied Docker entrypoint to LF during image build | Windows checkouts can copy CRLF despite repository attributes, which makes Linux report the executable script as missing.
 2026-11-13 | Exclude the local whisper.cpp checkout from Git | Docker builds its own Linux CLI and the local source checkout is machine-specific; keep it available locally without publishing its gitlink.
+2026-11-13 | Enable Silero VAD by default with non-speech suppression, no temperature fallback, and no text context; verify the sub-1 MB model by SHA-256 | Sparse/no-speech audio caused Whisper `base` to hallucinate repeated phrases, while word-level repetition can be real and must not be blindly deduplicated.
+2026-11-13 | Remap VAD-compressed token offsets to each segment's source-audio offset before writing transcript words | whisper.cpp maps segment offsets back to source time but leaves token offsets on the compacted VAD timeline.

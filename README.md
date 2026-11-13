@@ -67,12 +67,14 @@ Job state is stored in `data/jobs.sqlite`. Jobs run through an in-process queue 
 - `LLM_MODEL`: defaults to `hermes-main`.
 - `WHISPER_MODEL`: defaults to `base`; `small` is also supported if installed.
 - `WHISPER_LANG`: CLI language override; web uploads always use automatic language detection.
+- `WHISPER_VAD`: enables Silero voice activity detection by default; set `false` to disable.
+- `WHISPER_VAD_MODEL_PATH`: optional path to the Silero VAD model. Use `bun run download-vad-model` locally; Docker fetches it on first start.
 - `WHISPER_BIN`: optional path to `whisper-cli`; defaults to the Windows tool path locally and `/usr/local/bin/whisper-cli` in Docker.
 - `WHISPER_MODELS_DIR`: optional model directory; defaults to the Windows tool model directory locally and `/models` in Docker.
 - `WHISPER_MODEL_PATH`: optional explicit model file path.
 - `FACE_MODEL_PATH`: optional custom path to the YuNet ONNX face model.
 
-The face model is only needed when face tracking is enabled. It is downloaded by `bun run download-face-model` and kept under `data/` by default.
+The face model is only needed when face tracking is enabled. It is downloaded by `bun run download-face-model` and kept under `data/` by default. The sub-1 MB Silero VAD model is downloaded and checksum-verified with `bun run download-vad-model` for local Windows runs.
 
 ## Docker
 
@@ -84,7 +86,7 @@ Copy-Item .env.example .env
 docker compose up --build
 ```
 
-Open <http://127.0.0.1:3000>. On first start, Compose downloads the default `base` Whisper model (about 142 MiB) into `models/`; uploaded videos and generated files in `data/` and models persist on the host. Docker keeps the SQLite job database in its own persistent volume so Linux SQLite can use reliable file locking on Windows. Set `WHISPER_MODEL=small` to use a locally downloaded small model. The default container LLM URL is `http://192.168.1.13:20128/v1`; override `LLM_BASE_URL` in `.env` for another reachable 9Router address. `docker compose down` stops the app and keeps all data volumes.
+Open <http://127.0.0.1:3000>. On first start, Compose downloads the default `base` Whisper model (about 142 MiB) and the Silero VAD model (under 1 MB) into `models/`; uploaded videos and generated files in `data/` and models persist on the host. Docker keeps the SQLite job database in its own persistent volume so Linux SQLite can use reliable file locking on Windows. Set `WHISPER_MODEL=small` to use a locally downloaded small model. The default container LLM URL is `http://192.168.1.13:20128/v1`; override `LLM_BASE_URL` in `.env` for another reachable 9Router address. Set `WHISPER_VAD=false` to disable VAD. `docker compose down` stops the app and keeps all data volumes.
 
 ## For contributors and coding agents
 
