@@ -8,12 +8,13 @@ Phase: PHASE FIX | Branch: phase-9-content-modes
 - No-speech and no-valid-candidate outcomes fail with a clear reason instead of completing with zero clips.
 - Empty-result projects can retry selection using cached audio and transcript; stale rendering appears only when clips exist.
 - Clip metadata follows the language detected in the transcript.
+- Docker startup fixed by preserving LF line endings; rebuilt container is healthy at `/health`.
 - Phase 7–9 editing, layouts, content modes, cancellation, and editable project names remain available.
 - `bun run check` covers unit tests and short FFmpeg end-to-end/integration fixtures.
 
 ## Next
 
-- Restart the app and retry existing empty projects; verify a 30-minute Indonesian upload when available.
+- Retry existing empty projects; verify a 30-minute Indonesian upload when available.
 
 ## Known bugs / open questions
 

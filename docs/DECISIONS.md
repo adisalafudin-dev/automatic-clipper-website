@@ -66,3 +66,4 @@ Format: `date | decision | reason`
 2026-11-13 | The upload flow defaults to Whisper language auto-detection and Default mode; jobs with no valid 30–90 second candidates fail with a reason and can retry selection from the cached transcript | Uploading should transcribe, select, and render automatically without making an empty result look successful.
 2026-11-13 | Clip metadata follows the detected transcript language | Titles and descriptions should match the language Whisper recognized rather than always using Bahasa Indonesia.
 2026-11-13 | Check for an LLM API key before starting transcription when clip selection is required | A missing key should fail before spending CPU time on a long video.
+2026-11-13 | Force LF line endings for shell scripts with `.gitattributes` | Docker on Linux cannot run a CRLF shebang copied from a Windows checkout.
