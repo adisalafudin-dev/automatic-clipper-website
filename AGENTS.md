@@ -220,17 +220,19 @@ Rules for this phase:
   line builder.
 - 9.9 Hook title overlay: show the clip's hook/title for the first ~2-3 s, styled
   by the preset. Tests: overlay timing and text escaping.
-- 9.10 Zoom punch-in (optional, experimental): slight zoom on emphasized words,
-  behind a profile flag, off by default. Measure render time on this CPU and
-  record it in DECISIONS.md. Drop it if the slowdown is large.
+- 9.10 Zoom punch-in (optional, experimental): benchmarked on the local CPU and
+  dropped after a matched short fixture rose from 0.35s to 0.55s (+55%); see
+  DECISIONS.md. Do not add it back without a new user request.
 - 9.11 Wrap-up: update README/AGENTS.md usage for modes, rebuild the Docker image,
   run one end-to-end job per mode on a short fixture video.
 
-### Profile values to start with
-- gaming: layout split, audioWeight about 0.3, gaming glossary, bold caption preset
-- podcast: layout center-crop, audioWeight about 0.1, clean caption preset
-- default: current behavior, audioWeight 0
-Tune the numbers in Phase 4 style comparisons, not by guessing.
+### Current profile values and use
+- CLI: `bun run src/cli.ts video.mp4 --mode gaming --facecam-rect 0.68,0.04,0.28,0.28`.
+- The UI loads Default, Gaming, and Podcast from `GET /modes`; saved jobs reuse their mode for rerenders.
+- gaming: split facecam layout, audioWeight 0.3, gaming glossary, Bold captions.
+- podcast: center-crop layout, audioWeight 0.1, Clean captions.
+- default: current center-crop behavior, Classic captions, audioWeight 0.
+- Audio energy blends percentile-normalized RMS loudness with the LLM score; weight 0 leaves ranking unchanged.
 
 
 

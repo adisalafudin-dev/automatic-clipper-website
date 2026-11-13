@@ -25,6 +25,8 @@ bun run start
 
 Open <http://127.0.0.1:3000>. The server binds to localhost by default. Choose English or Bahasa Indonesia and a content mode for each upload, then upload a video up to 2 GB. Gaming mode stacks a configurable facecam crop above the gameplay; set the normalized `x,y,w,h` rectangle in the upload form. Its glossary in `glossaries/gaming.json` corrects configured transcript terms while keeping their timing. The selected language and mode are saved with the job and manifest. Available modes are Default, Gaming, and Podcast. Select the job under **Recent projects** to preview clips. Adjust a clip’s start/end or captions, then choose **Render changes**. Caption presets are Classic, Bold, and Clean; layouts include center crop, blurred background, and stacked panels. The hook-title overlay is optional.
 
+Default retains center crop, Classic captions, and LLM-only ranking. Gaming uses the split facecam layout, Bold captions, glossary corrections, and a 0.3 audio-energy ranking weight. Podcast uses center crop, Clean captions, and a 0.1 audio-energy weight. Audio energy combines normalized FFmpeg RMS loudness (bounded by the 10th and 90th percentiles) with the model score.
+
 To change the address, set `HOST` or `PORT` before running `bun run start`. Restart the server after updating code or configuration.
 
 ## Command-line use

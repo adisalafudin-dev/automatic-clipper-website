@@ -75,7 +75,7 @@ export function buildLayoutGraph(inputLabel: string, outputLabel: string, layout
     // Keep captions on the final 1080x1920 canvas so the lower-third position stays correct.
     return `${inputLabel}split=2[${outputLabel}face0][${outputLabel}main0];` +
       `[${outputLabel}face0]crop=w=iw*${rect.w}:h=ih*${rect.h}:x=iw*${rect.x}:y=ih*${rect.y},scale=1080:960:force_original_aspect_ratio=decrease,pad=1080:960:(ow-iw)/2:(oh-ih)/2:color=black[${outputLabel}top];` +
-      `[${outputLabel}main0]crop=w='min(iw,ih*16/9)':h='min(ih,iw*9/16)':x=(iw-ow)/2:y=(ih-oh)/2,scale=1080:960[${outputLabel}bottom];` +
+      `[${outputLabel}main0]crop=w='min(iw,ih*9/8)':h='min(ih,iw*8/9)':x=(iw-ow)/2:y=(ih-oh)/2,scale=1080:960[${outputLabel}bottom];` +
       `[${outputLabel}top][${outputLabel}bottom]vstack=inputs=2,${subtitles}[${outputLabel}]`;
   }
   // Stack two width-fitted copies in equal-height panels for a landscape source.
