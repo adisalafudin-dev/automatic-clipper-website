@@ -71,10 +71,13 @@ export function buildLayoutGraph(inputLabel: string, outputLabel: string, layout
   }
   if (layout === "split") {
     const rect = facecamRect ?? { x: 0.70, y: 0.70, w: 0.30, h: 0.30 };
+    const rectRight = Number((rect.x + rect.w).toFixed(6));
     const faceX = trackFacecam
-      ? `min(max(${cropX}\\,iw*${rect.x})\\,iw*${rect.x + rect.w}-ow)`
+      ? `min(max(${cropX}\\,iw*${rect.x})\\,iw*${rectRight}-ow)`
       : `iw*${rect.x}`;
-    const gameX = rect.x + rect.w / 2 > 0.5 ? "0" : "iw-ow";
+    const gameX = rect.x + rect.w / 2 > 0.5
+      ? `max(0\\,min((iw-ow)/2\\,iw*${rect.x}-ow))`
+      : `min(iw-ow\\,max((iw-ow)/2\\,iw*${rectRight}))`;
     // FFmpeg equivalent: ffmpeg -i input.mp4 -filter_complex "[0:v]split=2[face][main];[face]crop=... ,scale=1080:960[facepanel];[main]crop=...,scale=1080:960[gamepanel];[facepanel][gamepanel]vstack=inputs=2,subtitles=filename='captions/clip.ass'[vout]" -map "[vout]" output.mp4
     // Keep captions on the final 1080x1920 canvas so the lower-third position stays correct.
     return `${inputLabel}split=2[${outputLabel}face0][${outputLabel}main0];` +

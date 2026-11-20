@@ -271,6 +271,7 @@ Rencana
 - The UI loads Default, Gaming, and Podcast from `GET /modes`; saved jobs reuse their mode for rerenders.
 - gaming: split facecam layout, audioWeight 0.3, gaming glossary, Bold captions.
 - Gaming facecam position is auto-detected per clip unless a manual rectangle is set; missing/stale detections fall back to the Gaming default.
+- Gaming gameplay crops stay centered where possible and shift only enough to exclude the facecam region.
 - podcast: center-crop layout, audioWeight 0.1, Clean captions.
 - default: current center-crop behavior, Classic captions, audioWeight 0.
 - Audio energy blends percentile-normalized RMS loudness with the LLM score; weight 0 leaves ranking unchanged.

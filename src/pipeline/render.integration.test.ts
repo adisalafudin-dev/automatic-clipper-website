@@ -94,6 +94,12 @@ test("renders a tiny FFmpeg fixture as captioned 9:16 normalized video with edit
     expect(trackedStreams[0]!.width).toBe(1080);
     expect(trackedStreams[0]!.height).toBe(1920);
 
+    const gamingArgs = buildRenderArgs(source, "clips/gaming-centered.mp4", "captions/clip-01.ass", 0, 2_000, [], [], "split", { x: 0.7, y: 0.7, w: 0.3, h: 0.3 });
+    await run(gamingArgs, jobDir);
+    const gamingProbe = await run(["ffprobe", "-v", "error", "-show_entries", "stream=width,height", "-of", "json", path.join(jobDir, "clips", "gaming-centered.mp4")]);
+    const gamingVideo = (JSON.parse(gamingProbe) as { streams: Array<{ width: number; height: number }> }).streams[0]!;
+    expect(gamingVideo).toEqual({ width: 1080, height: 1920 });
+
     const naturalDir = path.join(temp, "natural");
     const natural = await renderClips(source, naturalDir, {
       model: "test",
