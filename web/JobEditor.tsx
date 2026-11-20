@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ClipFeedback, ClipFeedbackDecision, ClipFeedbackReason, JobView, UiClipEdit, UiSentence } from "../src/types.ts";
-import { createClip, getTranscript, removeClip, renderClip, renderStale, retryJob, saveClipEdit, saveClipFeedback } from "./api.ts";
+import type { JobView, UiClipEdit, UiSentence } from "../src/types.ts";
+import type { ModeName, ModeProfile } from "../src/modes.ts";
+import { createClip, getModes, getTranscript, removeClip, renderClip, renderStale, retryJob, saveClipEdit } from "./api.ts";
 import { clampRange, durationWarning, formatTime, parseTime, sentenceSelectionRange, snapRangeToWords, type TimeRange } from "./lib/trim.ts";
 
-type JobDetail = { job: JobView; edits: Record<string, UiClipEdit>; feedback: Record<string, ClipFeedback> };
+type JobDetail = { job: JobView; edits: Record<string, UiClipEdit> };
 type Props = { detail: JobDetail; onEditSaved: () => Promise<void> };
 
 const clock = (ms: number) => formatTime(ms).slice(0, -4);
@@ -16,7 +17,6 @@ export function JobEditor({ detail, onEditSaved }: Props) {
   const [loop, setLoop] = useState(false);
   const [playhead, setPlayhead] = useState(0);
   const [loadError, setLoadError] = useState("");
-  const [feedbackStatus, setFeedbackStatus] = useState("");
   const [range, setRange] = useState<TimeRange>({ startMs: clips[0]?.start ?? 0, endMs: clips[0]?.end ?? 0 });
   const [snap, setSnap] = useState(true);
   const [saveState, setSaveState] = useState("Saved");
@@ -24,11 +24,22 @@ export function JobEditor({ detail, onEditSaved }: Props) {
   const [endText, setEndText] = useState(formatTime(clips[0]?.end ?? 0));
   const [captionDraft, setCaptionDraft] = useState<Record<number, string>>({});
   const [selectedSentenceIds, setSelectedSentenceIds] = useState<number[]>([]);
+  const [renderMode, setRenderMode] = useState<ModeName>(job.mode);
+  const [renderFaceTracking, setRenderFaceTracking] = useState(job.faceTracking);
+  const [renderCaptions, setRenderCaptions] = useState(job.captionsEnabled);
+  const [modes, setModes] = useState<ModeProfile[]>([]);
   const selectionAnchor = useRef<number | null>(null);
   const dirty = useRef(false);
   const captionDirty = useRef(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const selected = clips.find((clip) => clip.id === selectedId) ?? clips[0];
+
+  useEffect(() => { void getModes().then(setModes).catch((reason: unknown) => setLoadError(reason instanceof Error ? reason.message : String(reason))); }, []);
+  useEffect(() => {
+    setRenderMode(job.mode);
+    setRenderFaceTracking(job.faceTracking);
+    setRenderCaptions(job.captionsEnabled);
+  }, [job.id]);
 
   useEffect(() => {
     let active = true;
@@ -55,7 +66,6 @@ export function JobEditor({ detail, onEditSaved }: Props) {
     if (!video || !selected) return;
     video.pause();
     const savedEdit = detail.edits[selected.id];
-    setFeedbackStatus("");
     const savedRange = { startMs: savedEdit?.startMs ?? selected.start, endMs: savedEdit?.endMs ?? selected.end };
     setRange(savedRange);
     setStartText(formatTime(savedRange.startMs));
@@ -128,7 +138,6 @@ export function JobEditor({ detail, onEditSaved }: Props) {
   const videoUrl = `/jobs/${encodeURIComponent(job.id)}/source`;
   const warning = durationWarning(range);
   const renderStatus = selected ? detail.edits[selected.id]?.renderStatus ?? "done" : "none";
-  const selectedFeedback = selected ? detail.feedback[selected.id] : undefined;
   const windowStart = Math.max(0, range.startMs - 30_000);
   const windowEnd = Math.min(sourceDuration, range.endMs + 30_000);
   const windowSpan = Math.max(1, windowEnd - windowStart);
@@ -167,17 +176,6 @@ export function JobEditor({ detail, onEditSaved }: Props) {
       setLoadError(reason instanceof Error ? reason.message : String(reason));
     }
   };
-  const saveFeedback = async (decision: ClipFeedbackDecision, reason?: ClipFeedbackReason) => {
-    if (!selected) return;
-    setFeedbackStatus("Menyimpan...");
-    try {
-      await saveClipFeedback(job.id, selected.id, decision, reason);
-      setFeedbackStatus("Tersimpan lokal");
-      await onEditSaved();
-    } catch (reason: unknown) {
-      setFeedbackStatus(reason instanceof Error ? reason.message : String(reason));
-    }
-  };
   const deleteSelectedClip = async () => {
     if (!selected || !window.confirm(`Delete ${selected.title}?`)) return;
     try {
@@ -188,18 +186,28 @@ export function JobEditor({ detail, onEditSaved }: Props) {
       setLoadError(reason instanceof Error ? reason.message : String(reason));
     }
   };
+  const rerenderWithSettings = async () => {
+    try {
+      await renderStale(job.id, { mode: renderMode, faceTracking: renderFaceTracking, captionsEnabled: renderCaptions });
+      await onEditSaved();
+    } catch (reason) {
+      setLoadError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
 
   return <section className="editor-shell" aria-label="Job editor">
-    <header className="editor-heading"><div><span className="eyebrow">JOB EDITOR</span><h2>{job.filename}</h2></div><div className="editor-actions">{clips.length > 0 && <button className="button" disabled={job.status === "running" || job.status === "queued"} onClick={() => void renderStale(job.id).then(onEditSaved).catch((reason: unknown) => setLoadError(reason instanceof Error ? reason.message : String(reason)))}>Render all stale</button>}{clips.length === 0 && (job.status === "failed" || job.status === "completed") && <button className="button" onClick={() => void retryJob(job.id).then(onEditSaved).catch((reason: unknown) => setLoadError(reason instanceof Error ? reason.message : String(reason)))}>Retry clip generation</button>}<span className={`badge ${job.status}`}>{job.status}</span></div></header>
+    <header className="editor-heading"><div><span className="eyebrow">JOB EDITOR</span><h2>{job.filename}</h2></div><div className="editor-actions">{clips.length > 0 && <button className="button" disabled={job.status === "running" || job.status === "queued"} onClick={() => void renderStale(job.id).then(onEditSaved).catch((reason: unknown) => setLoadError(reason instanceof Error ? reason.message : String(reason)))}>Render all stale</button>}{clips.length === 0 && job.status === "completed" && <button className="button" onClick={() => void retryJob(job.id).then(onEditSaved).catch((reason: unknown) => setLoadError(reason instanceof Error ? reason.message : String(reason)))}>Retry clip generation</button>}<span className={`badge ${job.status}`}>{job.status}</span></div></header>
     {loadError && <p className="error" role="alert">{loadError}</p>}
     {job.status !== "completed" && <div className="editor-progress"><span>{job.error ? `Failed: ${job.error}` : `${job.stage} · ${job.progress}%`}</span><div className="progress-track"><div className="progress-fill" style={{ width: `${job.progress}%` }} /></div></div>}
+    {clips.length > 0 && <details className="job-render-settings"><summary><span><strong>Render settings</strong><small>Mode: {job.mode} · Face tracking: {job.faceTracking ? "On" : "Off"} · Subtitles: {job.captionsEnabled ? "On" : "Off"}</small></span><span className="router-settings-chevron" aria-hidden="true">⌄</span></summary><div className="job-render-settings-body"><p className="muted">Change these options and re-render every clip. Your selections are saved with this project.</p><label className="form-field"><span>Mode</span><select value={renderMode} disabled={job.status === "running" || job.status === "queued"} onChange={(event) => setRenderMode(event.currentTarget.value as ModeName)}>{modes.map((item) => <option value={item.name} key={item.name}>{item.name}</option>)}</select></label><div className="job-render-toggles"><label className="upload-option"><input type="checkbox" checked={renderFaceTracking} disabled={job.status === "running" || job.status === "queued"} onChange={(event) => setRenderFaceTracking(event.currentTarget.checked)} /><span><strong>Track faces</strong><small>Keep the speaker in frame</small></span></label><label className="upload-option"><input type="checkbox" checked={renderCaptions} disabled={job.status === "running" || job.status === "queued"} onChange={(event) => setRenderCaptions(event.currentTarget.checked)} /><span><strong>Add subtitles</strong><small>Burn captions into clips</small></span></label></div><div className="job-render-actions"><span className="muted">All clips will be rendered again.</span><button className="button primary" disabled={job.status === "running" || job.status === "queued"} onClick={() => void rerenderWithSettings()}>Re-render all clips</button></div></div></details>}
     <div className="editor-grid">
       <aside className="editor-column clip-column"><h3>Clips <span>{clips.length}</span></h3>{clips.length ? clips.map((clip) => {
         const status = detail.edits[clip.id]?.renderStatus ?? "done";
-        return <button className={`clip-choice ${selected?.id === clip.id ? "active" : ""}`} key={clip.id} onClick={() => setSelectedId(clip.id)}><strong>{clip.title}</strong><span>{clock(clip.duration)} · score {clip.score}/10</span><span className={`badge ${status}`}>{status}</span></button>;
+        return <button className={`clip-choice ${selected?.id === clip.id ? "active" : ""}`} key={clip.id} onClick={() => setSelectedId(clip.id)}><strong>{clip.title}</strong><span className="clip-meta"><span>{clock(clip.duration)}</span><span>Score {clip.score}/10</span></span><span className={`badge ${status}`}>{status}</span></button>;
       }) : <p className={job.status === "failed" ? "error" : "muted"}>{job.status === "failed" ? `Clip generation failed: ${job.error ?? "unknown error"}` : job.status === "completed" ? "No clips were created. Retry clip generation to reuse the transcript and try selection again." : "Clips will appear here automatically when processing finishes."}</p>}</aside>
       <section className="editor-column preview-column" aria-label="Source preview">
         {selected ? <>
+          <div className="preview-heading"><div><span className="eyebrow">SELECTED CLIP</span><h3>{selected.title}</h3></div><span className="preview-score">{clock(selected.duration)} · {selected.score}/10</span></div>
           <div className="preview-frame"><video ref={videoRef} src={videoUrl} controls preload="metadata" onTimeUpdate={(event) => {
             const time = event.currentTarget.currentTime * 1000;
             setPlayhead(time);
@@ -213,34 +221,21 @@ export function JobEditor({ detail, onEditSaved }: Props) {
             if (time < range.startMs || time >= range.endMs) event.currentTarget.currentTime = range.startMs / 1000;
           }} /></div>
           <div className="preview-tools"><label><input type="checkbox" checked={loop} onChange={(event) => setLoop(event.currentTarget.checked)} /> Loop preview</label><span>{clock(range.startMs)}–{clock(range.endMs)}</span></div>
-          <p className="preview-caption">{currentSentence?.words.map((word) => captionDraft[word.wordIndex ?? -1] ?? word.text).filter(Boolean).join(" ") ?? selected.hook}</p><p className="preview-note">Preview only, final look is rendered.</p>
+          <div className="caption-preview"><span>Caption preview</span><p className="preview-caption">{currentSentence?.words.map((word) => captionDraft[word.wordIndex ?? -1] ?? word.text).filter(Boolean).join(" ") ?? selected.hook}</p><small>Final appearance is shown in the rendered clip.</small></div>
           <div className="trim-fields"><label>Start<input value={startText} onChange={(event) => setStartText(event.currentTarget.value)} onBlur={() => commitTimeText("startMs", startText)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label><label>End<input value={endText} onChange={(event) => setEndText(event.currentTarget.value)} onBlur={() => commitTimeText("endMs", endText)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label></div>
           <div className="range-wrap"><input aria-label="Clip start range" type="range" min="0" max={windowSpan} step="100" value={Math.min(windowSpan, Math.max(0, range.startMs - windowStart))} onChange={(event) => updateRange({ ...range, startMs: windowStart + Number(event.currentTarget.value) })} /><input aria-label="Clip end range" type="range" min="0" max={windowSpan} step="100" value={Math.min(windowSpan, Math.max(0, range.endMs - windowStart))} onChange={(event) => updateRange({ ...range, endMs: windowStart + Number(event.currentTarget.value) })} /></div>
-          <div className="trim-actions"><button onClick={() => updateRange({ ...range, startMs: playhead })}>Start = playhead</button><button onClick={() => updateRange({ ...range, endMs: playhead })}>End = playhead</button><button onClick={() => updateRange({ ...range, startMs: range.startMs - 100 })}>Start −100 ms</button><button onClick={() => updateRange({ ...range, startMs: range.startMs + 100 })}>Start +100 ms</button><button onClick={() => updateRange({ ...range, endMs: range.endMs - 100 })}>End −100 ms</button><button onClick={() => updateRange({ ...range, endMs: range.endMs + 100 })}>End +100 ms</button><button onClick={() => { if (videoRef.current) videoRef.current.currentTime = range.startMs / 1000; }}>Jump to start</button><button onClick={() => { if (videoRef.current) videoRef.current.currentTime = range.endMs / 1000; }}>Jump to end</button><button onClick={() => updateRange({ startMs: detail.edits[selected.id]?.origStartMs ?? selected.start, endMs: detail.edits[selected.id]?.origEndMs ?? selected.end })}>Reset</button><label><input type="checkbox" checked={snap} onChange={(event) => setSnap(event.currentTarget.checked)} /> Snap to words</label></div>
+          <div className="trim-toolbox">
+            <div className="trim-tool-group"><span>Set from playhead</span><div><button onClick={() => updateRange({ ...range, startMs: playhead })}>Set start</button><button onClick={() => updateRange({ ...range, endMs: playhead })}>Set end</button></div></div>
+            <div className="trim-tool-group"><span>Fine adjust · 0.1 sec</span><div><button onClick={() => updateRange({ ...range, startMs: range.startMs - 100 })}>Start −</button><button onClick={() => updateRange({ ...range, startMs: range.startMs + 100 })}>Start +</button><button onClick={() => updateRange({ ...range, endMs: range.endMs - 100 })}>End −</button><button onClick={() => updateRange({ ...range, endMs: range.endMs + 100 })}>End +</button></div></div>
+            <div className="trim-tool-group"><span>Playback</span><div><button onClick={() => { if (videoRef.current) videoRef.current.currentTime = range.startMs / 1000; }}>Jump to start</button><button onClick={() => { if (videoRef.current) videoRef.current.currentTime = range.endMs / 1000; }}>Jump to end</button><button onClick={() => updateRange({ startMs: detail.edits[selected.id]?.origStartMs ?? selected.start, endMs: detail.edits[selected.id]?.origEndMs ?? selected.end })}>Reset</button><label><input type="checkbox" checked={snap} onChange={(event) => setSnap(event.currentTarget.checked)} /> Snap to words</label></div></div>
+          </div>
           <p className="trim-status">Duration {formatTime(range.endMs - range.startMs)} · {saveState}{warning && <span className="warning"> · Outside 30–90 sec</span>}</p>
-          <section className="clip-feedback" aria-label="Penilaian klip">
-            <div><h4>Penilaian klip</h4><span>Disimpan di komputer ini</span></div>
-            <div className="feedback-actions">
-              <button type="button" className={selectedFeedback?.decision === "post" ? "active" : ""} aria-pressed={selectedFeedback?.decision === "post"} onClick={() => void saveFeedback("post")}>Layak diposting</button>
-              <button type="button" className={selectedFeedback?.decision === "skip" ? "active" : ""} aria-pressed={selectedFeedback?.decision === "skip"} onClick={() => void saveFeedback("skip")}>Lewati</button>
-            </div>
-            {selectedFeedback?.decision === "skip" && <label className="feedback-reason">Alasan (opsional)
-              <select value={selectedFeedback.reason ?? ""} onChange={(event) => void saveFeedback("skip", (event.currentTarget.value || undefined) as ClipFeedbackReason | undefined)}>
-                <option value="">Pilih alasan</option>
-                <option value="weak_hook">Hook lemah</option>
-                <option value="missing_context">Kurang konteks</option>
-                <option value="weak_payoff">Payoff kurang jelas</option>
-                <option value="transcript_error">Transcript salah</option>
-              </select>
-            </label>}
-            <p role="status">{feedbackStatus || (selectedFeedback ? "Penilaian tersimpan lokal." : "Belum dinilai. Penilaian tidak dikirim ke 9Router.")}</p>
-          </section>
           <div className="render-controls"><button className="button primary" disabled={job.status === "running" || job.status === "queued" || renderStatus === "queued" || renderStatus === "rendering"} onClick={() => void renderClip(job.id, selected.id).then(onEditSaved).catch((reason: unknown) => setLoadError(reason instanceof Error ? reason.message : String(reason)))}>{renderStatus === "queued" || renderStatus === "rendering" ? "Rendering…" : renderStatus === "done" ? "Render again" : "Render clip"}</button><span className={`badge ${renderStatus}`}>{renderStatus}</span><button className="button danger" disabled={job.status === "running" || job.status === "queued"} onClick={() => void deleteSelectedClip()}>Delete clip</button></div>
           {detail.edits[selected.id]?.renderError && <p className="error" role="alert">{detail.edits[selected.id]!.renderError}</p>}
           {renderStatus === "done" && <div className="rendered-result"><h4>Rendered clip</h4><video controls preload="metadata" src={`/jobs/${encodeURIComponent(job.id)}/clips/${encodeURIComponent(selected.id)}/file`} /><a href={`/jobs/${encodeURIComponent(job.id)}/clips/${encodeURIComponent(selected.id)}/file`} download={`${selected.id}.mp4`}>Download clip</a></div>}
         </> : <p className="muted">Select a clip to preview.</p>}
       </section>
-      <aside className="editor-column transcript-column"><div className="transcript-heading"><h3>Transcript & captions</h3><button className="button" disabled={!selectedSentenceIds.length} onClick={() => void addSelectedClip()}>Create clip from selection</button></div>{selectedSentenceIds.length > 0 && <p className="selection-hint">{selectedSentenceIds.length} sentence{selectedSentenceIds.length === 1 ? "" : "s"} selected · Shift-click to extend</p>}{sentences.length ? <div className="transcript-list">{sentences.map((sentence) => <div className={`caption-line ${currentSentence?.id === sentence.id ? "current" : ""} ${selectedSentenceIds.includes(sentence.id) ? "selected-sentence" : ""}`} key={sentence.id}><button className="sentence-selector" onClick={(event) => selectSentence(sentence.id, event.shiftKey)} aria-pressed={selectedSentenceIds.includes(sentence.id)}><span>{clock(sentence.start)}</span>{sentence.text}</button><div className="caption-line-words">{sentence.words.map((word, wordIndex) => {
+      <aside className="editor-column transcript-column"><div className="transcript-heading"><div><h3>Transcript & captions</h3><p>Select a sentence to preview it. Shift-click to select a range.</p></div><span>{sentences.length}</span></div>{selectedSentenceIds.length > 0 && <p className="selection-hint">{selectedSentenceIds.length} sentence{selectedSentenceIds.length === 1 ? "" : "s"} selected</p>}<button className="button create-clip-button" disabled={!selectedSentenceIds.length} onClick={() => void addSelectedClip()}>Create clip from selection</button>{sentences.length ? <div className="transcript-list">{sentences.map((sentence) => <div className={`caption-line ${currentSentence?.id === sentence.id ? "current" : ""} ${selectedSentenceIds.includes(sentence.id) ? "selected-sentence" : ""}`} key={sentence.id}><button className="sentence-selector" onClick={(event) => selectSentence(sentence.id, event.shiftKey)} aria-pressed={selectedSentenceIds.includes(sentence.id)}><span>{clock(sentence.start)}</span>{sentence.text}</button><div className="caption-line-words">{sentence.words.map((word, wordIndex) => {
           const index = word.wordIndex ?? wordIndex;
           const editable = word.end > range.startMs && word.start < range.endMs;
           const text = captionDraft[index] ?? word.text;

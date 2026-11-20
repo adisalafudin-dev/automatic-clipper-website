@@ -33,16 +33,16 @@ test("ASS subtitles have per-word karaoke highlighting and clip-relative timesta
     { text: "{safe}", start: 250, end: 750 },
   ], 0, 800);
   expect(ass).toContain("PlayResX: 1080");
-  expect(ass).toContain("&H0000FFFF");
-  expect(ass).toContain("Style: Default,Arial,66,&H00FFFFFF,&H0000FFFF,&H00101010,&H80000000,-1,0,1,4,1,5,70,70,0,1");
+  expect(ass).toContain("WrapStyle: 0");
+  expect(ass).toContain("Style: Default,Arial,66,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,1,4,0,5,70,70,0,1");
   expect(ass).toContain("Dialogue: 0,0:00:00.00,0:00:00.75");
   expect(ass).toContain("{\\k25}A {\\k50}\\{safe\\}");
 });
 
 test("caption presets build their configured ASS style lines", () => {
-  expect(buildAssStyleLine("classic")).toBe("Style: Default,Arial,66,&H00FFFFFF,&H0000FFFF,&H00101010,&H80000000,-1,0,1,4,1,5,70,70,0,1");
-  expect(buildAssStyleLine("bold")).toBe("Style: Default,Arial,74,&H00FFFFFF,&H007BF2C1,&H00101010,&H90000000,-1,0,1,6,2,5,70,70,0,1");
-  expect(buildAssStyleLine("clean")).toBe("Style: Default,Arial,58,&H00FFFFFF,&H007BF2C1,&H00101010,&H70000000,0,0,1,2,0,5,76,76,0,1");
+  expect(buildAssStyleLine("classic")).toBe("Style: Default,Arial,66,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,1,4,0,5,70,70,0,1");
+  expect(buildAssStyleLine("bold")).toBe("Style: Default,Arial,74,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,1,6,0,5,70,70,0,1");
+  expect(buildAssStyleLine("clean")).toBe("Style: Default,Arial,58,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,1,2,0,5,76,76,0,1");
 });
 
 test("hook title overlay lasts 2.5 seconds and escapes ASS text with preset styling", () => {
@@ -70,9 +70,17 @@ test("FFmpeg arguments crop, scale, subtitle, normalize, and encode the clip", (
     "-vf", "crop=w='ih*9/16':h=ih:x='(iw-ow)/2':y=0,scale=1080:1920,subtitles=filename='captions/clip-01.ass'",
     "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
     "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p",
+    "-fps_mode", "cfr", "-r", "30",
     "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "1",
     "-movflags", "+faststart", "clips/clip-01.mp4",
   ]);
+});
+
+test("FFmpeg argument builders omit subtitle filters when captions are disabled", () => {
+  const args = buildRenderArgs("video.mp4", "clips/clip.mp4", "captions/clip.ass", 0, 30_000, [], [], "crop", undefined, false, false);
+  expect(args[args.indexOf("-vf") + 1]).toBe("crop=w='ih*9/16':h=ih:x='(iw-ow)/2':y=0,scale=1080:1920");
+  const graph = buildLayoutGraph("[0:v]", "vout", "split", "(iw-ow)/2", "captions/clip.ass", undefined, false, false);
+  expect(graph).not.toContain("subtitles=");
 });
 
 test("pause cuts concatenate with trim filters inside the original decode window", () => {

@@ -4,6 +4,7 @@ import { parseCandidateResponse, rankAndMapCandidates, type ClipCandidate } from
 import type { JsonGenerator } from "./llm.ts";
 import { transcriptSentences } from "./sentences.ts";
 import { combineScores } from "./audio-energy.ts";
+import type { ActivityWindow } from "../youtube-analysis.ts";
 
 const SCHEMA = `{"candidates":[{"startSentenceId":0,"endSentenceId":1,"hook":"string","title":"string","score":0,"reason":"string"}]}`;
 const MIN_CANDIDATE_SCORE = 7;
@@ -13,6 +14,9 @@ export async function selectCandidates(
   llm: JsonGenerator,
   energyScores: Map<number, number> = new Map(),
   audioWeight = 0,
+  activityWindows: ActivityWindow[] = [],
+  chapters: Array<{ start: number; end: number; title: string }> = [],
+  minimumProposalsOverride?: number,
 ): Promise<ClipCandidate[]> {
   const sentences = transcriptSentences(transcript);
   const chunks = chunkSentences(sentences);
@@ -27,6 +31,10 @@ export async function selectCandidates(
     const source = chunk.sentences
       .map((sentence) => `[${sentence.id}] ${sentence.text}`)
       .join("\n");
+    const chunkStart = chunk.sentences[0]!.start;
+    const chunkEnd = chunk.sentences.at(-1)!.end;
+    const activity = activityWindows.filter((window) => window.start < chunkEnd && window.end > chunkStart && (window.chatScore >= 5 || window.heatmapScore >= 5));
+    const chunkChapters = chapters.filter((chapter) => chapter.start < chunkEnd && chapter.end > chunkStart).slice(0, 20);
     const outputLanguage = transcript.language.toLowerCase().startsWith("id")
       ? "natural Bahasa Indonesia"
       : `the same language as the transcript (${transcript.language})`;
@@ -35,19 +43,26 @@ export async function selectCandidates(
       "Only propose a clip when its selected transcript contains the payoff, not just a setup, question, topic summary, or unresolved claim.",
       "A payoff must be explicit in the transcript: a conclusion, answer, reveal, punchline, decision, or described outcome. Never infer an unseen gameplay result from commentary or reactions.",
       "Return 30–90 second clip candidates. Choose boundaries from the supplied sentence IDs only.",
-      "Return 8–10 varied candidate options scoring at least 7 when the transcript allows, spread across distinct topics and time ranges; include non-overlapping alternatives. Quality matters more than meeting the count.",
-      "Aim for at least five final non-overlapping clips by offering alternatives across the full chunk, not several versions of one moment.",
+      ...(minimumProposalsOverride === 1
+        ? ["Choose the single strongest self-contained moment in this focused time window. Return one candidate scoring at least 7 only if the transcript supports it."]
+        : ["Return 8–10 varied candidate options scoring at least 7 when the transcript allows, spread across distinct topics and time ranges; include non-overlapping alternatives. Quality matters more than meeting the count.", "Aim for at least five final non-overlapping clips by offering alternatives across the full chunk, not several versions of one moment."]),
       "Exclude sponsor reads, ads, housekeeping, and disconnected introductions or outros.",
       "Use fact-grounded, concise titles and hooks supported by the selected sentences; do not invent quotes or add sensational claims.",
       `Write every hook, title, and reason in ${outputLanguage}; keep the meaning faithful to the transcript.`,
       "Avoid exposing private third-party crisis, health, or financial details; prefer public-interest facts.",
       "Score each candidate from 0 to 10 for hook strength, payoff quality, context, accuracy, clarity, and shareability. Return only candidates scoring 7 or higher; if fewer qualify, return fewer.",
+      ...(activity.length ? [
+        "Use the activity data below only as supporting evidence for a moment's audience reaction or replay interest; it never replaces transcript evidence, and chat spam alone is not a payoff.",
+        "Activity windows use milliseconds from the start of the video. Prefer transcript-supported moments that also align with strong audience or replay activity.",
+        `Activity windows: ${JSON.stringify(activity.map(({ start, end, chatScore, heatmapScore, chatCount, samples }) => ({ start, end, chatScore, heatmapScore, chatCount, samples })))}`,
+      ] : []),
+      ...(chunkChapters.length ? [`Video chapters overlapping this transcript: ${JSON.stringify(chunkChapters.map(({ start, end, title }) => ({ start, end, title })))}`] : []),
       "Do not include timestamps. Return only JSON with a candidates array, no markdown fences.",
       `Transcript chunk ${chunk.index + 1}/${chunks.length}:`,
       source,
     ].join("\n\n");
     const span = chunk.sentences.at(-1)!.end - chunk.sentences[0]!.start;
-    const minimumProposals = span >= 150_000 ? 8 : 1;
+    const minimumProposals = minimumProposalsOverride ?? (span >= 150_000 ? 8 : 1);
 
     try {
       const chunkStarted = performance.now();
@@ -87,13 +102,30 @@ export async function selectCandidates(
 
   const pass2Started = performance.now();
   const weighted = proposals.map((proposal) => {
-    if (audioWeight === 0 || energyScores.size === 0) return proposal;
+    let result = proposal;
+    if (audioWeight > 0 && energyScores.size > 0) {
     const spanEnergy = sentences
       .filter((sentence) => sentence.id >= proposal.startSentenceId && sentence.id <= proposal.endSentenceId)
       .map((sentence) => energyScores.get(sentence.id))
       .filter((score): score is number => score !== undefined);
     const energy = spanEnergy.length ? spanEnergy.reduce((sum, score) => sum + score, 0) / spanEnergy.length : 0;
-    return { ...proposal, score: combineScores(proposal.score, energy, audioWeight) };
+      result = { ...result, score: combineScores(result.score, energy, audioWeight) };
+    }
+    if (!activityWindows.length) return result;
+    const first = sentences.find((sentence) => sentence.id === proposal.startSentenceId);
+    const last = sentences.find((sentence) => sentence.id === proposal.endSentenceId);
+    if (!first || !last) return result;
+    const related = activityWindows.filter((window) => window.start < last.end && window.end > first.start);
+    if (!related.length) return result;
+    const chat = Math.max(...related.map((window) => window.chatScore));
+    const heatmap = Math.max(...related.map((window) => window.heatmapScore));
+    const hasChat = related.some((window) => window.chatCount > 0);
+    const hasHeatmap = heatmap > 0;
+    const chatWeight = hasChat ? 0.25 : 0;
+    const heatmapWeight = hasHeatmap ? 0.15 : 0;
+    const modelWeight = 1 - chatWeight - heatmapWeight;
+    const score = Math.round((result.score * modelWeight + chat * chatWeight + heatmap * heatmapWeight) * 10) / 10;
+    return { ...result, score, signalScores: { model: proposal.score, chat: hasChat ? chat : 0, heatmap } };
   });
   const selected = rankAndMapCandidates(weighted, sentences);
   console.log(`Pass 2 ranking: ${((performance.now() - pass2Started) / 1000).toFixed(2)}s`);

@@ -44,9 +44,10 @@ export type JobListItem = {
 export type JobView = JobListItem & {
   videoPath: string;
   faceTracking: boolean;
+  captionsEnabled: boolean;
   stages: Record<string, { status: string; progress: number }>;
   result: { source: string; clips: Array<{
-    id: string; file: string; captions: string; start: number; end: number; duration: number;
+    id: string; file: string; captions?: string; start: number; end: number; duration: number;
     startSentenceId: number; endSentenceId: number; title: string; hook: string; score: number; reason: string;
     metadata?: { title: string; description: string; hashtags: string[] };
   }> } | null;

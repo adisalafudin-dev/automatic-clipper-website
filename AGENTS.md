@@ -6,7 +6,7 @@ Read this at the start of every session. Goal: a **working app**, built efficien
 
 A CLI tool (web UI later) that takes one long video (30-60 min) and produces 5-10 short vertical clips (30-90 s) with burned-in captions, plus `clips.json`. It runs **locally on my Windows PC**. Not published, but it may be later, so avoid choices that make that painful.
 
-Out of scope for now: accounts, billing, cloud deployment, YouTube link downloading.
+Out of scope for now: accounts, billing, cloud deployment. The YouTube page can analyze completed videos/replays, select transcript-backed moments using chat/heatmap signals, and download only chosen sections.
 
 ## 2. How to work (token-efficient)
 
@@ -156,7 +156,7 @@ Exit check: one command turns `video.mp4` into N clips plus `clips.json`. `ffpro
 Rules:
 - Target is Linux containers on Docker Desktop (Windows). The Windows-only rules in section 10 apply to running on the host, not inside the container.
 - Do not bake secrets, `.env`, Whisper models, or videos into the image. Pass `.env` at runtime and mount models and `data/` as volumes.
-- 9Router runs on my phone on termux with the IP of 192.168.1.19 and port 5678 .
+- 9Router is configurable in the local app settings (endpoint, API key, and model); use `http://host.docker.internal:20128/v1` from Docker Desktop when 9Router runs on the Windows host.
 - Whisper binary and model paths are configurable by env, with Linux defaults in the container.
 - One container for API + UI + worker. Keep render concurrency at 1.
 Exit check: `docker compose up` on a clean checkout processes a sample video end to end, the clips match a non-Docker run, `data/` persists across restarts, and the image contains no secrets.
@@ -238,6 +238,7 @@ Rencana yang diusulkan:
 5. Jika proses gagal atau tidak menemukan clip, tampilkan penyebabnya dengan jelas di proyek.
 6. Pertahankan Render all stale sebagai tombol opsional untuk merender ulang clip yang sudah ada.
 
+
 Plan: TRANSCRIPTION FIX
 1. Pastikan sumber pengulangan dengan membandingkan transcript dan audio pada bagian yang mengulang, lalu cek apakah Whisper menandainya sebagai ucapan atau bagian hening.
 2. Tambahkan perlindungan terhadap halusinasi saat hening: evaluasi opsi VAD yang tersedia di whisper-cli dan gunakan konfigurasi yang sesuai. Jangan menghapus kata hanya karena berulang—bisa saja memang diucapkan.
@@ -246,6 +247,23 @@ Plan: TRANSCRIPTION FIX
 5. Catat perubahan di PROGRESS.md dan DECISIONS.md, jalankan bun run check, lalu commit perubahan.
 Model Whisper small menjadi opsi lanjutan jika VAD saja belum cukup; model itu lebih lambat di CPU, jadi tidak langsung dijadikan default.
 
+Plan: Make Clip More Viral
+Rencana
+1. Tetapkan sinyal yang relevan
+   - Hook: seberapa cepat klip menarik perhatian.
+   - Payoff: apakah ada hasil, kejutan, punchline, atau jawaban yang jelas.
+   - Kemandirian konteks: apakah klip bisa dipahami tanpa menonton video penuh.
+   - Energi audio: perubahan volume dan tempo bicara, bukan sekadar volume keras.
+   - Kejelasan ucapan: hindari klip yang transcript-nya kacau atau banyak hening.
+   - Duplikasi: kurangi skor untuk klip yang mengulang topik atau momen yang sama.
+2. Ubah prompt seleksi
+   Minta model memberi skor terpisah untuk hook, payoff, konteks, dan kejelasan, disertai alasan singkat. Jangan hanya minta satu skor “shareability”.
+3. Hitung skor akhir di aplikasi
+   Gabungkan skor model dengan sinyal audio dan transcript secara deterministik. Simpan komponen skornya di candidates.json, supaya terlihat kenapa klip dipilih.
+4. Tampilkan alasan di UI
+   Untuk tiap klip, tampilkan skor dan alasan seperti “hook cepat”, “payoff jelas”, atau “energi audio tinggi”. Biarkan pengguna menerima atau menolak saran itu.
+5. Uji pada video milikmu
+   Pilih 10–20 hasil klip, beri penilaian manual “layak diposting / tidak”, lalu sesuaikan bobot berdasarkan hasilnya. Metrik performa platform seperti retention atau share baru bisa dipakai jika nanti pengguna memasukkannya sendiri.
 
 ### Current profile values and use
 - CLI: `bun run src/cli.ts video.mp4 --mode gaming --facecam-rect 0.68,0.04,0.28,0.28`.

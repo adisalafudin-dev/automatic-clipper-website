@@ -65,9 +65,9 @@ function escapeAss(text: string): string {
 }
 
 export function buildAssStyleLine(style: CaptionStyle): string {
-  if (style === "bold") return "Style: Default,Arial,74,&H00FFFFFF,&H007BF2C1,&H00101010,&H90000000,-1,0,1,6,2,5,70,70,0,1";
-  if (style === "clean") return "Style: Default,Arial,58,&H00FFFFFF,&H007BF2C1,&H00101010,&H70000000,0,0,1,2,0,5,76,76,0,1";
-  return "Style: Default,Arial,66,&H00FFFFFF,&H0000FFFF,&H00101010,&H80000000,-1,0,1,4,1,5,70,70,0,1";
+  if (style === "bold") return "Style: Default,Arial,74,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,1,6,0,5,70,70,0,1";
+  if (style === "clean") return "Style: Default,Arial,58,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,1,2,0,5,76,76,0,1";
+  return "Style: Default,Arial,66,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,1,4,0,5,70,70,0,1";
 }
 
 export function buildAssTitleEvent(title: string, duration: number, style: CaptionStyle): string | null {
@@ -95,7 +95,8 @@ export function buildAss(
   const header = [
     "[Script Info]",
     "ScriptType: v4.00+",
-    "WrapStyle: 2",
+    // Let libass wrap long karaoke lines inside the frame's style margins.
+    "WrapStyle: 0",
     "ScaledBorderAndShadow: yes",
     "PlayResX: 1080",
     "PlayResY: 1920",

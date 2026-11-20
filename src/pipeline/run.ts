@@ -31,7 +31,7 @@ export type PipelineResult = {
   candidateCount: number;
 };
 
-export type PipelineOptions = { faceTracking?: boolean; language?: string; mode?: ModeName; facecamRect?: FacecamRect; reselect?: boolean; signal?: AbortSignal };
+export type PipelineOptions = { faceTracking?: boolean; captionsEnabled?: boolean; language?: string; mode?: ModeName; facecamRect?: FacecamRect; reselect?: boolean; signal?: AbortSignal };
 
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new Error("Job cancelled");
@@ -123,7 +123,7 @@ export async function runPipeline(
   }
 
   const renderedManifest = await timedStage("rendering", () =>
-    renderClips(videoPath, jobDir, transcript, identifiedCandidates, force, {}, options.faceTracking === true, profile.layout, options.facecamRect ?? profile.facecamRect, profile.captionPreset, options.signal),
+    renderClips(videoPath, jobDir, transcript, identifiedCandidates, force, {}, options.faceTracking === true, profile.layout, options.facecamRect ?? profile.facecamRect, profile.captionPreset, options.signal, options.captionsEnabled !== false),
   );
   const manifest: ClipsManifest = {
     ...renderedManifest,

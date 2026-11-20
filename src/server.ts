@@ -5,6 +5,9 @@ import { checkFfmpeg } from "./ffmpeg/check.ts";
 import { createJobApi } from "./api.ts";
 import { JobQueue } from "./state/queue.ts";
 import { JobStore } from "./state/jobs.ts";
+import { createYouTubeDownloadApi } from "./youtube-download-api.ts";
+import { createYouTubeAnalysisApi } from "./youtube-analysis-api.ts";
+import { LlmSettingsStore } from "./llm-settings.ts";
 import appHtml from "../web/index.html";
 
 async function main() {
@@ -14,6 +17,11 @@ async function main() {
   database.exec("PRAGMA journal_mode = WAL;");
   const store = new JobStore(database);
   const queue = new JobQueue(store);
+  const llmSettings = new LlmSettingsStore(path.join("data", "llm-settings.json"));
+  await llmSettings.load();
+  const jobApi = createJobApi(store, queue, { llmSettings });
+  const youtubeDownloads = createYouTubeDownloadApi();
+  const youtubeAnalysis = createYouTubeAnalysisApi(store, queue);
   const rawPort = Number(process.env.PORT ?? "3000");
   if (!Number.isInteger(rawPort) || rawPort < 0 || rawPort > 65_535) {
     throw new Error("PORT must be an integer from 0 to 65535");
@@ -23,7 +31,7 @@ async function main() {
     port: rawPort,
     maxRequestBodySize: 2_000_000_000,
     routes: { "/": appHtml },
-    fetch: (request) => createJobApi(store, queue).fetch(request),
+    fetch: async (request) => (await youtubeDownloads.fetch(request)) ?? (await youtubeAnalysis.fetch(request)) ?? jobApi.fetch(request),
   });
   console.log(`Video Clipper API listening at http://${server.hostname}:${server.port}`);
 

@@ -7,6 +7,7 @@ export type ProposedCandidate = {
   title: string;
   score: number;
   reason: string;
+  signalScores?: { model: number; chat: number; heatmap: number };
 };
 
 export type ClipCandidate = ProposedCandidate & {

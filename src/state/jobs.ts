@@ -21,6 +21,7 @@ export type Job = {
   videoPath: string;
   displayName: string;
   faceTracking: boolean;
+  captionsEnabled: boolean;
   language: ClipLanguage;
   mode: ModeName;
   facecamRect: FacecamRect | null;
@@ -39,6 +40,7 @@ type JobRow = {
   video_path: string;
   display_name: string;
   face_tracking: number;
+  captions_enabled: number;
   language: ClipLanguage;
   mode: ModeName;
   facecam_rect: string | null;
@@ -65,6 +67,7 @@ function fromRow(row: JobRow): Job {
     videoPath: row.video_path,
     displayName: row.display_name || defaultProjectName(row.video_path),
     faceTracking: row.face_tracking === 1,
+    captionsEnabled: row.captions_enabled !== 0,
     language: row.language,
     mode: row.mode,
     facecamRect: row.facecam_rect ? JSON.parse(row.facecam_rect) as FacecamRect : null,
@@ -87,6 +90,7 @@ export class JobStore {
         video_path TEXT NOT NULL,
         display_name TEXT NOT NULL DEFAULT '',
         face_tracking INTEGER NOT NULL DEFAULT 0,
+        captions_enabled INTEGER NOT NULL DEFAULT 1,
         language TEXT NOT NULL DEFAULT 'en',
         mode TEXT NOT NULL DEFAULT 'default',
         facecam_rect TEXT,
@@ -105,6 +109,7 @@ export class JobStore {
     if (!columns.some((column) => column.name === "face_tracking")) {
       db.exec("ALTER TABLE jobs ADD COLUMN face_tracking INTEGER NOT NULL DEFAULT 0");
     }
+    if (!columns.some((column) => column.name === "captions_enabled")) db.exec("ALTER TABLE jobs ADD COLUMN captions_enabled INTEGER NOT NULL DEFAULT 1");
     if (!columns.some((column) => column.name === "display_name")) {
       db.exec("ALTER TABLE jobs ADD COLUMN display_name TEXT NOT NULL DEFAULT ''");
     }
@@ -127,6 +132,7 @@ export class JobStore {
           video_path TEXT NOT NULL,
           display_name TEXT NOT NULL DEFAULT '',
           face_tracking INTEGER NOT NULL DEFAULT 0,
+          captions_enabled INTEGER NOT NULL DEFAULT 1,
           language TEXT NOT NULL DEFAULT 'en',
           mode TEXT NOT NULL DEFAULT 'default',
           facecam_rect TEXT,
@@ -139,7 +145,7 @@ export class JobStore {
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
         )`);
-        db.exec(`INSERT INTO jobs SELECT id, video_path, display_name, face_tracking, language, mode, facecam_rect, status, stage, progress, stages_json, error, result_json, created_at, updated_at FROM jobs_before_cancellation`);
+        db.exec(`INSERT INTO jobs SELECT id, video_path, display_name, face_tracking, captions_enabled, language, mode, facecam_rect, status, stage, progress, stages_json, error, result_json, created_at, updated_at FROM jobs_before_cancellation`);
         db.exec("DROP TABLE jobs_before_cancellation");
         db.exec("CREATE INDEX IF NOT EXISTS jobs_created_at_idx ON jobs(created_at DESC)");
         db.exec("COMMIT");
@@ -150,13 +156,13 @@ export class JobStore {
     }
   }
 
-  create(id: string, videoPath: string, faceTracking = false, language: ClipLanguage = "en", mode: ModeName = "default", facecamRect: FacecamRect | null = null, displayName = defaultProjectName(videoPath)): Job {
+  create(id: string, videoPath: string, faceTracking = false, language: ClipLanguage = "en", mode: ModeName = "default", facecamRect: FacecamRect | null = null, displayName = defaultProjectName(videoPath), captionsEnabled = true): Job {
     const now = new Date().toISOString();
     const stages = initialStages();
     this.db.query(`
-      INSERT INTO jobs (id, video_path, display_name, face_tracking, language, mode, facecam_rect, status, stage, progress, stages_json, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', 'queued', 0, ?, ?, ?)
-    `).run(id, videoPath, displayName, faceTracking ? 1 : 0, language, mode, facecamRect ? JSON.stringify(facecamRect) : null, JSON.stringify(stages), now, now);
+      INSERT INTO jobs (id, video_path, display_name, face_tracking, captions_enabled, language, mode, facecam_rect, status, stage, progress, stages_json, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', 'queued', 0, ?, ?, ?)
+    `).run(id, videoPath, displayName, faceTracking ? 1 : 0, captionsEnabled ? 1 : 0, language, mode, facecamRect ? JSON.stringify(facecamRect) : null, JSON.stringify(stages), now, now);
     return this.get(id)!;
   }
 
@@ -170,6 +176,10 @@ export class JobStore {
       "SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?",
     ).all(limit) as JobRow[];
     return rows.map(fromRow);
+  }
+
+  remove(id: string): boolean {
+    return this.db.query("DELETE FROM jobs WHERE id = ?").run(id).changes > 0;
   }
 
   markRunning(id: string): void {
@@ -216,6 +226,12 @@ export class JobStore {
   updateResult(id: string, result: ClipsManifest): void {
     this.update(id, "UPDATE jobs SET result_json=?, updated_at=? WHERE id=?", [
       JSON.stringify(result), new Date().toISOString(), id,
+    ]);
+  }
+
+  updateRenderSettings(id: string, settings: { mode: ModeName; faceTracking: boolean; captionsEnabled: boolean }): void {
+    this.update(id, "UPDATE jobs SET mode=?, face_tracking=?, captions_enabled=?, updated_at=? WHERE id=?", [
+      settings.mode, settings.faceTracking ? 1 : 0, settings.captionsEnabled ? 1 : 0, new Date().toISOString(), id,
     ]);
   }
 

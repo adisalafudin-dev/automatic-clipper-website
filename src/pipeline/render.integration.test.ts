@@ -50,7 +50,7 @@ test("renders a tiny FFmpeg fixture as captioned 9:16 normalized video with edit
     const editedAss = await Bun.file(path.join(jobDir, "captions", "clip-01.ass")).text();
     expect(editedAss).toContain("custom");
     expect(editedAss).toContain("Fixture");
-    expect(editedAss).toContain("&H007BF2C1");
+    expect(editedAss).toContain("Style: Default,Arial,74,&H00FFFFFF,&H00FFFFFF,&H00000000");
     expect(editedAss).not.toContain("Test");
 
     const probeText = await run([
@@ -71,6 +71,17 @@ test("renders a tiny FFmpeg fixture as captioned 9:16 normalized video with edit
     expect(Number(probe.format.duration)).toBeGreaterThan(1.8);
     expect(Number(probe.format.duration)).toBeLessThan(2.2);
 
+    const cleanDir = path.join(temp, "no-subtitles");
+    const clean = await renderClips(source, cleanDir, transcript, [{
+      startSentenceId: 0, endSentenceId: 0, start: 0, end: 2000,
+      hook: "Clean hook", title: "Clean", score: 8, reason: "No subtitle fixture",
+    }], true, {}, false, "center-crop", undefined, "classic", undefined, false);
+    expect(clean.clips[0]!.captions).toBeUndefined();
+    expect(await Bun.file(path.join(cleanDir, "captions", "clip-01.ass")).exists()).toBe(false);
+    const cleanProbe = await run(["ffprobe", "-v", "error", "-show_entries", "stream=width,height", "-of", "json", path.join(cleanDir, "clips", "clip-01.mp4")]);
+    const cleanVideo = (JSON.parse(cleanProbe) as { streams: Array<{ width: number; height: number }> }).streams[0]!;
+    expect(cleanVideo).toEqual({ width: 1080, height: 1920 });
+
     const trackedArgs = buildRenderArgs(source, "clips/tracked.mp4", "captions/clip-01.ass", 0, 2_000, [
       { time: 0.5, centerX: 120 }, { time: 1.5, centerX: 190 },
     ]);
@@ -83,8 +94,8 @@ test("renders a tiny FFmpeg fixture as captioned 9:16 normalized video with edit
     expect(trackedStreams[0]!.width).toBe(1080);
     expect(trackedStreams[0]!.height).toBe(1920);
 
-    const pausedDir = path.join(temp, "paused");
-    const paused = await renderClips(source, pausedDir, {
+    const naturalDir = path.join(temp, "natural");
+    const natural = await renderClips(source, naturalDir, {
       model: "test",
       language: "en",
       words: [
@@ -101,19 +112,19 @@ test("renders a tiny FFmpeg fixture as captioned 9:16 normalized video with edit
       score: 8,
       reason: "Pause fixture",
     }], true);
-    expect(paused.clips[0]!.duration).toBe(960);
-    expect(paused.clips[0]!.start).toBe(0);
-    expect(paused.clips[0]!.end).toBe(2500);
-    const pausedAss = await Bun.file(path.join(pausedDir, "captions", "clip-01.ass")).text();
-    expect(pausedAss).toContain("Dialogue: 0,0:00:00.00,0:00:00.84");
-    expect(pausedAss).toContain("{\\k54}Wait {\\k30}now.");
-    const pausedProbe = await run([
+    expect(natural.clips[0]!.duration).toBe(2500);
+    expect(natural.clips[0]!.start).toBe(0);
+    expect(natural.clips[0]!.end).toBe(2500);
+    const naturalAss = await Bun.file(path.join(naturalDir, "captions", "clip-01.ass")).text();
+    expect(naturalAss).toContain("Dialogue: 0,0:00:00.00,0:00:01.90");
+    expect(naturalAss).toContain("{\\k160}Wait {\\k30}now.");
+    const naturalProbe = await run([
       "ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "json",
-      path.join(pausedDir, "clips", "clip-01.mp4"),
+      path.join(naturalDir, "clips", "clip-01.mp4"),
     ]);
-    const pausedDuration = Number((JSON.parse(pausedProbe) as { format: { duration: string } }).format.duration);
-    expect(pausedDuration).toBeGreaterThan(0.75);
-    expect(pausedDuration).toBeLessThan(1.25);
+    const naturalDuration = Number((JSON.parse(naturalProbe) as { format: { duration: string } }).format.duration);
+    expect(naturalDuration).toBeGreaterThan(2.3);
+    expect(naturalDuration).toBeLessThan(2.7);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }

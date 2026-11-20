@@ -9,10 +9,15 @@ WORKDIR /build/whisper.cpp
 RUN cmake -B build -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=ON -DGGML_NATIVE=OFF \
     && cmake --build build --config Release --target whisper-cli -j 2
 
-# Runtime contains the app, CPU whisper-cli, and Linux FFmpeg only.
+# Runtime contains the app, CPU whisper-cli, FFmpeg, yt-dlp, and Deno.
 FROM oven/bun:1.4.4-slim AS runtime
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl ffmpeg libgomp1 \
+    && apt-get install -y --no-install-recommends ca-certificates curl ffmpeg libgomp1 unzip \
+    && curl --fail --location https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux --output /usr/local/bin/yt-dlp \
+    && curl --fail --location https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip --output /tmp/deno.zip \
+    && unzip /tmp/deno.zip -d /usr/local/bin \
+    && rm /tmp/deno.zip \
+    && chmod +x /usr/local/bin/yt-dlp \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY package.json bun.lock ./
@@ -30,6 +35,7 @@ RUN sed -i 's/\r$//' /usr/local/bin/video-clipper-entrypoint \
     && mkdir -p /app/data /models
 ENV HOST=0.0.0.0 \
     PORT=3000 \
+    YT_DLP_BIN=/usr/local/bin/yt-dlp \
     WHISPER_BIN=/usr/local/bin/whisper-cli \
     WHISPER_MODELS_DIR=/models
 EXPOSE 3000

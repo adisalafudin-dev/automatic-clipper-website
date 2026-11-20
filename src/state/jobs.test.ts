@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { JobStore } from "./jobs.ts";
 
-test("existing Phase 5 job databases migrate to store the face tracking setting", () => {
+test("existing job databases migrate settings with captions enabled by default", () => {
   const db = new Database(":memory:");
   try {
     db.exec(`CREATE TABLE jobs (
@@ -19,10 +19,12 @@ test("existing Phase 5 job databases migrate to store the face tracking setting"
     expect(store.get("legacy-job")?.displayName).toBe("legacy");
     const job = store.create("face-track-job", "local-video.mp4", true);
     expect(job.faceTracking).toBe(true);
+    expect(job.captionsEnabled).toBe(true);
     expect(job.language).toBe("en");
     expect(job.mode).toBe("default");
     expect(job.displayName).toBe("local-video");
     expect(store.create("center-job", "local-video.mp4").faceTracking).toBe(false);
+    expect(store.create("no-captions-job", "local-video.mp4", false, "en", "default", null, undefined, false).captionsEnabled).toBe(false);
     expect(store.create("indonesian-job", "local-video.mp4", false, "id").language).toBe("id");
     expect(store.create("gaming-job", "local-video.mp4", false, "en", "gaming").mode).toBe("gaming");
     expect(store.create("named-job", "random.mp4", false, "en", "default", null, "Podcast episode").displayName).toBe("Podcast episode");

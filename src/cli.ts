@@ -6,12 +6,13 @@ async function main() {
   console.log(`Clipper CLI starting on Bun ${Bun.version}`);
   const options = parseCliArgs(Bun.argv.slice(2));
   const videoPath = options.videoPath;
-  if (!videoPath) throw new Error("Usage: bun run src/cli.ts <video-file> [--force] [--face-track] [--mode <default|gaming|podcast>] [--facecam-rect x,y,w,h]");
+  if (!videoPath) throw new Error("Usage: bun run src/cli.ts <video-file> [--force] [--face-track] [--no-subtitles] [--mode <default|gaming|podcast>] [--facecam-rect x,y,w,h]");
 
   const jobId = path.parse(videoPath).name;
   const jobDir = path.join("data", "jobs", jobId);
   const result = await runPipeline(videoPath, jobDir, options.force, undefined, {
     faceTracking: options.faceTracking,
+    captionsEnabled: options.captionsEnabled,
     mode: options.mode,
     facecamRect: options.facecamRect,
   });

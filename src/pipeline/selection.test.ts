@@ -112,6 +112,25 @@ test("selects valid proposals through the JSON generator interface", async () =>
   expect(capturedPrompt).toContain("only candidates scoring 7 or higher");
 });
 
+test("uses chat and heatmap spikes as supporting AI context and records their score components", async () => {
+  let prompt = "";
+  const activity = Array.from({ length: 14 }, (_, index) => ({
+    start: index * 30_000, end: (index + 1) * 30_000,
+    chatScore: index === 0 ? 10 : 0, heatmapScore: index === 0 ? 8 : 0,
+    chatCount: index === 0 ? 20 : 0, samples: index === 0 ? ["Huge play!"] : [],
+  }));
+  const selected = await selectCandidates(transcript, {
+    async generateJson(value) {
+      prompt = value;
+      return { candidates: sentences.map((sentence) => proposal(sentence.id)) };
+    },
+  }, new Map(), 0, activity);
+  expect(prompt).toContain("Huge play!");
+  expect(prompt).toContain("supporting evidence");
+  expect(selected[0]!.signalScores).toEqual({ model: 8, chat: 10, heatmap: 8 });
+  expect(selected[0]!.score).toBe(8.5);
+});
+
 test("retries then rejects candidates below the payoff quality floor", async () => {
   let calls = 0;
   await expect(selectCandidates(transcript, {

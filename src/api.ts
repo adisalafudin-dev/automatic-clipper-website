@@ -10,6 +10,7 @@ import { transcriptSentences } from "./pipeline/sentences.ts";
 import { isClipLanguage } from "./languages.ts";
 import { getMode, listModes, parseFacecamRect, type FacecamRect, type ModeName } from "./modes.ts";
 import { defaultProjectName, normalizeProjectName } from "./project-name.ts";
+import { LlmSettingsStore, type LlmSettingsInput } from "./llm-settings.ts";
 
 const MAX_UPLOAD_BYTES = 2_000_000_000;
 const CLIP_FEEDBACK_REASONS = new Set<ClipFeedbackReason>([
@@ -58,7 +59,7 @@ async function mediaResponse(filePath: string, contentType: string, request: Req
 export function createJobApi(
   store: JobStore,
   queue: JobQueue,
-  options: { uploadDir?: string; jobRoot?: string } = {},
+  options: { uploadDir?: string; jobRoot?: string; llmSettings?: LlmSettingsStore } = {},
 ) {
   const uploadDir = options.uploadDir ?? path.join("data", "uploads");
   const jobRoot = options.jobRoot ?? path.join("data", "jobs");
@@ -73,6 +74,30 @@ export function createJobApi(
         return json(listModes());
       }
 
+      if (url.pathname === "/settings/llm" && request.method === "GET") {
+        return json(options.llmSettings?.publicSettings() ?? { baseUrl: process.env.LLM_BASE_URL ?? "http://192.168.1.9:20128/v1", model: process.env.LLM_MODEL ?? "hermes-main", configured: Boolean(process.env.LLM_API_KEY) });
+      }
+
+      if (url.pathname === "/settings/llm" && request.method === "PUT") {
+        if (!options.llmSettings) return json({ error: "LLM settings are unavailable" }, 503);
+        try {
+          const body = await request.json() as LlmSettingsInput;
+          return json({ settings: await options.llmSettings.update(body) });
+        } catch (error) {
+          return json({ error: error instanceof Error ? error.message : String(error) }, 400);
+        }
+      }
+
+      if (url.pathname === "/settings/llm/test" && request.method === "POST") {
+        if (!options.llmSettings) return json({ error: "LLM settings are unavailable" }, 503);
+        try {
+          await options.llmSettings.testConnection();
+          return json({ ok: true });
+        } catch (error) {
+          return json({ error: error instanceof Error ? error.message : String(error) }, 502);
+        }
+      }
+
       const retryMatch = url.pathname.match(/^\/jobs\/([^/]+)\/retry$/);
       if (retryMatch && request.method === "POST") {
         let jobId: string;
@@ -81,12 +106,13 @@ export function createJobApi(
         const job = store.get(jobId);
         if (!job) return json({ error: "Job not found" }, 404);
         if (job.status === "queued" || job.status === "running") return json({ error: "Job is already processing" }, 409);
-        if ((job.result?.clips.length ?? 0) > 0) return json({ error: "This project already has clips" }, 409);
         if (!(await Bun.file(job.videoPath).exists())) return json({ error: "Original video file not found" }, 404);
+        const hasRenderedClips = (job.result?.clips.length ?? 0) > 0;
         store.requeue(jobId);
         queue.enqueue({
-          id: job.id, videoPath: job.videoPath, force: false, reselect: true,
-          faceTracking: job.faceTracking, language: job.language, mode: job.mode, facecamRect: job.facecamRect,
+          id: job.id, videoPath: job.videoPath, force: false,
+          ...(hasRenderedClips ? { operation: "render" as const, onlyStale: true } : { reselect: true }),
+          faceTracking: job.faceTracking, captionsEnabled: job.captionsEnabled, language: job.language, mode: job.mode, facecamRect: job.facecamRect,
         });
         return json({ job: store.get(jobId) }, 202);
       }
@@ -95,6 +121,7 @@ export function createJobApi(
         let videoPath: string;
         let force = false;
         let faceTracking = request.headers.get("x-face-tracking") === "true";
+        let captionsEnabled = request.headers.get("x-captions-enabled") !== "false";
         let languageInput: unknown = "auto";
         let modeInput: unknown;
         let facecamRectInput: unknown;
@@ -110,6 +137,7 @@ export function createJobApi(
             const entry = form.get("video");
             uploadFile = entry instanceof File ? entry : null;
             faceTracking = form.get("faceTracking") === "true";
+            captionsEnabled = form.get("captionsEnabled") !== "false";
             languageInput = form.get("language") ?? languageInput;
             modeInput = form.get("mode") ?? undefined;
             facecamRectInput = form.get("facecamRect") ?? undefined;
@@ -132,7 +160,16 @@ export function createJobApi(
           languageInput = request.headers.get("x-language") ?? languageInput;
           modeInput = request.headers.get("x-mode") ?? undefined;
           facecamRectInput = request.headers.get("x-facecam-rect") ?? undefined;
-          displayNameInput = request.headers.get("x-project-name") ?? undefined;
+          faceTracking = request.headers.get("x-face-tracking") === "true";
+          captionsEnabled = request.headers.get("x-captions-enabled") !== "false";
+          const projectNameHeader = request.headers.get("x-project-name");
+          if (projectNameHeader) {
+            try {
+              displayNameInput = decodeURIComponent(projectNameHeader);
+            } catch {
+              return json({ error: "x-project-name must be URL-encoded" }, 400);
+            }
+          }
           uploadBody = request.body;
           if (!uploadBody) return json({ error: "Video upload body is empty" }, 400);
           const contentLength = Number(request.headers.get("content-length") ?? "0");
@@ -189,11 +226,13 @@ export function createJobApi(
           if (payload.faceTracking !== undefined && typeof payload.faceTracking !== "boolean") {
             return json({ error: "faceTracking must be a boolean" }, 400);
           }
+          if (payload.captionsEnabled !== undefined && typeof payload.captionsEnabled !== "boolean") return json({ error: "captionsEnabled must be a boolean" }, 400);
           languageInput = payload.language ?? languageInput;
           if (Object.hasOwn(payload, "mode")) modeInput = payload.mode;
           if (Object.hasOwn(payload, "facecamRect")) facecamRectInput = payload.facecamRect;
           if (Object.hasOwn(payload, "displayName")) displayNameInput = payload.displayName;
           faceTracking = payload.faceTracking === true;
+          captionsEnabled = payload.captionsEnabled !== false;
           videoPath = path.resolve(payload.videoPath.trim());
           force = payload.force === true;
           if (!(await Bun.file(videoPath).exists())) {
@@ -231,8 +270,8 @@ export function createJobApi(
         }
 
         const id = randomUUID();
-        const job = store.create(id, videoPath, faceTracking, language, mode, facecamRect, displayName);
-        queue.enqueue({ id, videoPath, force, faceTracking, language, mode, facecamRect });
+        const job = store.create(id, videoPath, faceTracking, language, mode, facecamRect, displayName, captionsEnabled);
+        queue.enqueue({ id, videoPath, force, faceTracking, captionsEnabled, language, mode, facecamRect });
         return json({ job: { ...job, filename: job.displayName } }, 202, { location: `/jobs/${id}` });
       }
 
@@ -276,6 +315,37 @@ export function createJobApi(
         }
         const feedback = await readClipFeedback(path.join(jobRoot, job.id));
         return json({ job: { ...job, filename: job.displayName }, edits, feedback });
+      }
+
+      if (jobMatch && request.method === "DELETE") {
+        let id: string;
+        try { id = decodeURIComponent(jobMatch[1]!); }
+        catch { return json({ error: "Invalid job ID" }, 400); }
+        let job = store.get(id);
+        if (!job) return json({ error: "Project not found" }, 404);
+        if (job.status === "queued" || job.status === "running") {
+          await queue.cancel(id);
+          job = store.get(id);
+          if (!job) return json({ error: "Project not found" }, 404);
+        }
+        const resolvedJobRoot = path.resolve(jobRoot);
+        const resolvedJobDir = path.resolve(resolvedJobRoot, job.id);
+        const jobRelative = path.relative(resolvedJobRoot, resolvedJobDir);
+        if (!jobRelative || jobRelative === ".." || jobRelative.startsWith(`..${path.sep}`) || path.isAbsolute(jobRelative)) {
+          return json({ error: "Project data path is invalid" }, 500);
+        }
+        try {
+          await rm(resolvedJobDir, { recursive: true, force: true });
+          const resolvedUploads = path.resolve(uploadDir);
+          const resolvedSource = path.resolve(job.videoPath);
+          const uploadRelative = path.relative(resolvedUploads, resolvedSource);
+          const isUploadedSource = uploadRelative !== "" && !uploadRelative.startsWith(`..${path.sep}`) && uploadRelative !== ".." && !path.isAbsolute(uploadRelative);
+          if (isUploadedSource) await rm(resolvedSource, { force: true });
+          if (!store.remove(id)) return json({ error: "Project was already deleted" }, 404);
+        } catch (error) {
+          return json({ error: `Could not delete project files: ${error instanceof Error ? error.message : String(error)}` }, 500);
+        }
+        return json({ ok: true });
       }
 
       const clipFeedbackMatch = url.pathname.match(/^\/jobs\/([^/]+)\/clips\/(clip-\d{2})\/feedback$/);
@@ -452,7 +522,7 @@ export function createJobApi(
         edits[clipId] = { ...edits[clipId], renderStatus: "queued", renderError: undefined };
         await writeFile(path.join(jobDir, "edits.json"), JSON.stringify(edits, null, 2));
         store.requeue(jobId);
-        queue.enqueue({ id: jobId, videoPath: job.videoPath, force: true, operation: "render", faceTracking: job.faceTracking, clipId, mode: job.mode, facecamRect: job.facecamRect });
+        queue.enqueue({ id: jobId, videoPath: job.videoPath, force: true, operation: "render", faceTracking: job.faceTracking, captionsEnabled: job.captionsEnabled, clipId, mode: job.mode, facecamRect: job.facecamRect });
         return json({ job: store.get(jobId) }, 202);
       }
 
@@ -544,16 +614,42 @@ export function createJobApi(
         const jobId = decodeURIComponent(renderMatch[1]!);
         const job = store.get(jobId);
         if (!job?.result) return json({ error: "Completed job not found" }, 404);
+        if (job.status === "queued" || job.status === "running") return json({ error: "Job is already processing" }, 409);
+        let mode = job.mode;
+        let faceTracking = job.faceTracking;
+        let captionsEnabled = job.captionsEnabled;
+        let renderEveryClip = false;
+        if (request.headers.get("content-type")?.includes("application/json")) {
+          let payload: unknown;
+          try { payload = await request.json(); }
+          catch { return json({ error: "Render settings must be valid JSON" }, 400); }
+          if (!isRecord(payload)) return json({ error: "Render settings must be a JSON object" }, 400);
+          if (payload.mode !== undefined) {
+            if (typeof payload.mode !== "string") return json({ error: "mode must be a valid mode name" }, 400);
+            try { mode = getMode(payload.mode).name as ModeName; }
+            catch (error) { return json({ error: error instanceof Error ? error.message : String(error) }, 400); }
+          }
+          if (payload.faceTracking !== undefined) {
+            if (typeof payload.faceTracking !== "boolean") return json({ error: "faceTracking must be a boolean" }, 400);
+            faceTracking = payload.faceTracking;
+          }
+          if (payload.captionsEnabled !== undefined) {
+            if (typeof payload.captionsEnabled !== "boolean") return json({ error: "captionsEnabled must be a boolean" }, 400);
+            captionsEnabled = payload.captionsEnabled;
+          }
+          renderEveryClip = true;
+          store.updateRenderSettings(jobId, { mode, faceTracking, captionsEnabled });
+        }
         const jobDir = path.join(jobRoot, jobId);
         let edits: Record<string, ClipRenderEdit> = {};
         try { edits = JSON.parse(await readFile(path.join(jobDir, "edits.json"), "utf8")) as Record<string, ClipRenderEdit>; }
         catch (error) { if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error; }
         for (const edit of Object.values(edits)) {
-          if (edit.renderStatus === "none" || edit.renderStatus === "failed") edit.renderStatus = "queued";
+          if (renderEveryClip || edit.renderStatus === "none" || edit.renderStatus === "failed") edit.renderStatus = "queued";
         }
         await writeFile(path.join(jobDir, "edits.json"), JSON.stringify(edits, null, 2));
         store.requeue(jobId);
-        queue.enqueue({ id: jobId, videoPath: job.videoPath, force: true, operation: "render", faceTracking: job.faceTracking, onlyStale: true, mode: job.mode, facecamRect: job.facecamRect });
+        queue.enqueue({ id: jobId, videoPath: job.videoPath, force: true, operation: "render", faceTracking, captionsEnabled, onlyStale: !renderEveryClip, mode, facecamRect: job.facecamRect });
         return json({ job: store.get(jobId) }, 202);
       }
 

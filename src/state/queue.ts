@@ -22,6 +22,7 @@ type QueueItem = {
   reselect?: boolean;
   operation?: "pipeline" | "render";
   faceTracking?: boolean;
+  captionsEnabled?: boolean;
   language?: string;
   mode?: ModeName;
   facecamRect?: FacecamRect | null;
@@ -29,9 +30,9 @@ type QueueItem = {
   onlyStale?: boolean;
 };
 
-type RenderRunner = (videoPath: string, jobDir: string, report: PipelineProgress, faceTracking: boolean, clipId?: string, onlyStale?: boolean, mode?: ModeName, facecamRect?: FacecamRect | null, signal?: AbortSignal) => Promise<PipelineResult>;
+type RenderRunner = (videoPath: string, jobDir: string, report: PipelineProgress, faceTracking: boolean, clipId?: string, onlyStale?: boolean, mode?: ModeName, facecamRect?: FacecamRect | null, signal?: AbortSignal, captionsEnabled?: boolean) => Promise<PipelineResult>;
 
-async function renderExisting(videoPath: string, jobDir: string, report: PipelineProgress, faceTracking: boolean, clipId?: string, onlyStale = false, mode: ModeName = "default", facecamRect?: FacecamRect | null, signal?: AbortSignal): Promise<PipelineResult> {
+async function renderExisting(videoPath: string, jobDir: string, report: PipelineProgress, faceTracking: boolean, clipId?: string, onlyStale = false, mode: ModeName = "default", facecamRect?: FacecamRect | null, signal?: AbortSignal, captionsEnabled = true): Promise<PipelineResult> {
   report("rendering", 0);
   const transcript = JSON.parse(await readFile(path.join(jobDir, "transcript.json"), "utf8")) as Transcript;
   const storedCandidates = JSON.parse(await readFile(path.join(jobDir, "candidates.json"), "utf8")) as ClipCandidate[];
@@ -67,7 +68,7 @@ async function renderExisting(videoPath: string, jobDir: string, report: Pipelin
   } catch (error) {
     if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
   }
-  const renderedManifest = await renderClips(videoPath, jobDir, transcript, selected, true, edits, faceTracking, profile.layout, facecamRect ?? profile.facecamRect, profile.captionPreset, signal);
+  const renderedManifest = await renderClips(videoPath, jobDir, transcript, selected, true, edits, faceTracking, profile.layout, facecamRect ?? profile.facecamRect, profile.captionPreset, signal, captionsEnabled);
   const oldMetadata = new Map(previousManifest?.clips.flatMap((clip) => clip.metadata ? [[clip.id, clip.metadata] as const] : []) ?? []);
   const manifest = {
     ...renderedManifest,
@@ -147,6 +148,7 @@ export class JobQueue {
               item.mode,
               item.facecamRect,
               controller.signal,
+              item.captionsEnabled !== false,
             );
             const manifest = { ...rendered.manifest, mode: item.mode ?? "default" };
             await Bun.write(path.join(jobDir, "clips.json"), JSON.stringify(manifest, null, 2));
@@ -154,6 +156,7 @@ export class JobQueue {
           } else {
             result = await this.pipeline(item.videoPath, jobDir, item.force, report, {
               faceTracking: item.faceTracking === true,
+              captionsEnabled: item.captionsEnabled !== false,
               language: item.language,
               mode: item.mode,
               facecamRect: item.facecamRect ?? undefined,

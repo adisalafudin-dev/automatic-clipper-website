@@ -395,6 +395,7 @@ test("browser upload supports preview, trim and caption edits, and queued rerend
   };
   let renderCount = 0;
   let faceTrackingRequested = false;
+  let captionsEnabledRequested = true;
   let pipelineMode = "";
   let rerenderFaceTracking = false;
   let rerenderOnlyStale = false;
@@ -402,6 +403,7 @@ test("browser upload supports preview, trim and caption edits, and queued rerend
   let rerenderFacecamRect: { x: number; y: number; w: number; h: number } | null = null;
   const queue = new JobQueue(store, async (videoPath, jobDir, _force, _report, options) => {
     faceTrackingRequested = options.faceTracking === true;
+    captionsEnabledRequested = options.captionsEnabled !== false;
     pipelineMode = options.mode ?? "";
     await mkdir(path.join(jobDir, "clips"), { recursive: true });
     await Bun.write(path.join(jobDir, "transcript.json"), JSON.stringify({
@@ -436,15 +438,18 @@ test("browser upload supports preview, trim and caption edits, and queued rerend
         "content-type": "application/octet-stream",
         "x-video-filename": "uploaded.mp4",
         "x-face-tracking": "true",
+        "x-captions-enabled": "false",
         "x-mode": "gaming",
         "x-facecam-rect": "0.7,0.7,0.3,0.3",
       },
       body: new File(["source video"], "uploaded.mp4", { type: "video/mp4" }),
     });
     expect(upload.status).toBe(202);
-    const { job: created } = await upload.json() as { job: { id: string; videoPath: string; mode: string } };
+    const { job: created } = await upload.json() as { job: { id: string; videoPath: string; mode: string; captionsEnabled: boolean } };
     await waitForStatus(baseUrl, created.id, "completed");
     expect(store.get(created.id)!.faceTracking).toBe(true);
+    expect(store.get(created.id)!.captionsEnabled).toBe(false);
+    expect(captionsEnabledRequested).toBe(false);
     expect(created.mode).toBe("gaming");
     expect(pipelineMode).toBe("gaming");
     expect(faceTrackingRequested).toBe(true);
@@ -576,6 +581,40 @@ test("multipart uploads from an already-open Phase 6 browser still work", async 
     expect(invalidMode.status).toBe(400);
   } finally {
     server.stop?.();
+    db.close();
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("deleting a project removes app data and uploaded source but preserves external source files", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "clipper-delete-project-"));
+  const uploadDir = path.join(temp, "uploads");
+  const jobRoot = path.join(temp, "jobs");
+  const externalRoot = path.join(temp, "external");
+  const db = new Database(":memory:");
+  try {
+    await Promise.all([mkdir(uploadDir, { recursive: true }), mkdir(jobRoot, { recursive: true }), mkdir(externalRoot, { recursive: true })]);
+    const uploadedVideo = path.join(uploadDir, "uploaded.mp4");
+    const externalVideo = path.join(externalRoot, "original.mp4");
+    await Promise.all([Bun.write(uploadedVideo, "uploaded source"), Bun.write(externalVideo, "user source")]);
+    const store = new JobStore(db);
+    store.create("uploaded", uploadedVideo);
+    store.create("external", externalVideo);
+    await Promise.all([Bun.write(path.join(jobRoot, "uploaded", "clips.json"), "{}"), Bun.write(path.join(jobRoot, "external", "clips.json"), "{}")]);
+    const app = createJobApi(store, new JobQueue(store), { uploadDir, jobRoot });
+
+    const uploadedDelete = await app.fetch(new Request("http://localhost/jobs/uploaded", { method: "DELETE" }));
+    expect(uploadedDelete?.status).toBe(200);
+    expect(store.get("uploaded")).toBeNull();
+    expect(await Bun.file(uploadedVideo).exists()).toBe(false);
+    expect(await Bun.file(path.join(jobRoot, "uploaded")).exists()).toBe(false);
+
+    const externalDelete = await app.fetch(new Request("http://localhost/jobs/external", { method: "DELETE" }));
+    expect(externalDelete?.status).toBe(200);
+    expect(store.get("external")).toBeNull();
+    expect(await Bun.file(externalVideo).text()).toBe("user source");
+    expect(await Bun.file(path.join(jobRoot, "external")).exists()).toBe(false);
+  } finally {
     db.close();
     await rm(temp, { recursive: true, force: true });
   }
