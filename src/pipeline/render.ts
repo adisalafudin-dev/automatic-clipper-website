@@ -4,7 +4,7 @@ import type { Transcript, Word } from "../types.ts";
 import type { ClipCandidate } from "./candidates.ts";
 import { applyCaptionWordEdits, buildAss, type CaptionStyle } from "./captions.ts";
 import type { SourceSpan } from "./pauses.ts";
-import { sampleFaceCenters, type FaceCenterSample } from "../vision/faces.ts";
+import { inferFacecamRect, probeVideoDimensions, sampleFaceDetections, smoothFaceCenters, type FaceCenterSample } from "../vision/faces.ts";
 import type { ModeName } from "../modes.ts";
 import type { FacecamRect } from "../modes.ts";
 import type { ClipMetadata } from "./clip-metadata.ts";
@@ -211,16 +211,30 @@ export async function renderClips(
     const renderStart = candidate.start;
     const renderEnd = candidate.end;
     let faceCenters: FaceCenterSample[] = [];
-    if (faceTracking) {
+    let effectiveFacecamRect = facecamRect;
+    const detectFacecam = modeLayout === "split" && !facecamRect;
+    if (faceTracking || detectFacecam) {
       const trackingStarted = performance.now();
       try {
-        faceCenters = await sampleFaceCenters(absoluteVideo, renderStart, renderEnd, undefined, signal);
-        console.log(`Face tracking ${id}: ${faceCenters.length} sparse samples in ${((performance.now() - trackingStarted) / 1000).toFixed(2)}s`);
-        if (!faceCenters.length) console.warn(`No face found for ${id}; using center crop`);
+        const dimensions = await probeVideoDimensions(absoluteVideo);
+        const detections = await sampleFaceDetections(absoluteVideo, renderStart, renderEnd, dimensions, signal);
+        if (detectFacecam) {
+          const inferredRect = inferFacecamRect(detections, dimensions);
+          effectiveFacecamRect = inferredRect ?? { x: 0.70, y: 0.70, w: 0.30, h: 0.30 };
+          if (!inferredRect) {
+            console.warn(`Could not reliably locate the facecam for ${id}; using the Gaming default. Set Facecam x,y,w,h for a manual override.`);
+          } else console.log(`Facecam detected for ${id}: ${JSON.stringify(effectiveFacecamRect)}`);
+        }
+        const trackingDetections = detectFacecam && effectiveFacecamRect
+          ? detections.filter((sample) => sample.centerX >= dimensions.width * effectiveFacecamRect!.x && sample.centerX <= dimensions.width * (effectiveFacecamRect!.x + effectiveFacecamRect!.w) && sample.centerY >= dimensions.height * effectiveFacecamRect!.y && sample.centerY <= dimensions.height * (effectiveFacecamRect!.y + effectiveFacecamRect!.h))
+          : detections;
+        if (faceTracking) faceCenters = smoothFaceCenters(trackingDetections);
+        console.log(`${faceTracking ? "Face tracking" : "Facecam detection"} ${id}: ${detections.length} sparse samples in ${((performance.now() - trackingStarted) / 1000).toFixed(2)}s`);
+        if (faceTracking && !faceCenters.length) console.warn(`No face found for ${id}; using center crop`);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        if (message.includes("face model missing") || message.includes("checksum mismatch")) throw error;
-        console.warn(`Face tracking failed for ${id}; using center crop: ${message}`);
+        if (faceTracking && (message.includes("face model missing") || message.includes("checksum mismatch"))) throw error;
+        console.warn(`${detectFacecam ? "Facecam detection" : "Face tracking"} failed for ${id}; ${detectFacecam ? "using the Gaming default" : "using center crop"}: ${message}`);
       }
     }
     const override = edit?.caption?.trim();
@@ -248,7 +262,7 @@ export async function renderClips(
         faceCenters,
         [],
         edit?.layout ?? (modeLayout === "split" ? "split" : "crop"),
-        facecamRect,
+        effectiveFacecamRect,
         modeLayout === "split" && faceTracking && faceCenters.length > 0,
         captionsEnabled,
       );
@@ -258,7 +272,7 @@ export async function renderClips(
         if (signal?.aborted || !faceTracking || !faceCenters.length) throw error;
         console.warn(`Tracked crop render failed for ${id}; retrying center crop: ${error instanceof Error ? error.message : String(error)}`);
         await runFfmpeg(
-          buildRenderArgs(absoluteVideo, outputRelative, captionsRelative, renderStart, renderEnd, [], [], edit?.layout ?? (modeLayout === "split" ? "split" : "crop"), facecamRect, false, captionsEnabled),
+          buildRenderArgs(absoluteVideo, outputRelative, captionsRelative, renderStart, renderEnd, [], [], edit?.layout ?? (modeLayout === "split" ? "split" : "crop"), effectiveFacecamRect, false, captionsEnabled),
           absoluteJobDir,
           signal,
         );

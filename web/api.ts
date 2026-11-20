@@ -58,7 +58,7 @@ export async function getYouTubeAnalysis(id: string): Promise<YouTubeAnalysisVie
   return result.job;
 }
 
-export async function createYouTubeProject(id: string, settings: { candidateIds: string[]; mode: ModeName; faceTracking: boolean; captionsEnabled: boolean }): Promise<YouTubeAnalysisView> {
+export async function createYouTubeProject(id: string, settings: { candidateIds: string[]; mode: ModeName; faceTracking: boolean; captionsEnabled: boolean; facecamRect?: string }): Promise<YouTubeAnalysisView> {
   const result = await request<{ job: YouTubeAnalysisView }>(`/youtube-analysis/${encodeURIComponent(id)}/create-project`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(settings),
   });
@@ -122,11 +122,14 @@ export async function saveClipEdit(jobId: string, clipId: string, payload: Recor
   });
 }
 
-export async function renderClip(jobId: string, clipId: string): Promise<void> {
-  await request(`/jobs/${encodeURIComponent(jobId)}/clips/${encodeURIComponent(clipId)}/render`, { method: "POST" });
+export async function renderClip(jobId: string, clipId: string, settings?: { mode: ModeName; faceTracking: boolean; captionsEnabled: boolean; facecamRect?: string | null }): Promise<void> {
+  await request(`/jobs/${encodeURIComponent(jobId)}/clips/${encodeURIComponent(clipId)}/render`, {
+    method: "POST",
+    ...(settings ? { headers: { "content-type": "application/json" }, body: JSON.stringify(settings) } : {}),
+  });
 }
 
-export async function renderStale(jobId: string, settings?: { mode: ModeName; faceTracking: boolean; captionsEnabled: boolean }): Promise<void> {
+export async function renderStale(jobId: string, settings?: { mode: ModeName; faceTracking: boolean; captionsEnabled: boolean; facecamRect?: string | null }): Promise<void> {
   await request(`/jobs/${encodeURIComponent(jobId)}/render`, {
     method: "POST",
     ...(settings ? { headers: { "content-type": "application/json" }, body: JSON.stringify(settings) } : {}),

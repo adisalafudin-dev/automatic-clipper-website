@@ -68,7 +68,8 @@ async function renderExisting(videoPath: string, jobDir: string, report: Pipelin
   } catch (error) {
     if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
   }
-  const renderedManifest = await renderClips(videoPath, jobDir, transcript, selected, true, edits, faceTracking, profile.layout, facecamRect ?? profile.facecamRect, profile.captionPreset, signal, captionsEnabled);
+    const renderFacecamRect = profile.layout === "split" ? facecamRect ?? undefined : profile.facecamRect;
+    const renderedManifest = await renderClips(videoPath, jobDir, transcript, selected, true, edits, faceTracking, profile.layout, renderFacecamRect, profile.captionPreset, signal, captionsEnabled);
   const oldMetadata = new Map(previousManifest?.clips.flatMap((clip) => clip.metadata ? [[clip.id, clip.metadata] as const] : []) ?? []);
   const manifest = {
     ...renderedManifest,

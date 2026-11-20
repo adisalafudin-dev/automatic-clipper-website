@@ -20,6 +20,8 @@ export function YouTubeDownloader({ onProjectCreated }: { onProjectCreated: (id:
   const [modes, setModes] = useState<ModeProfile[]>([]);
   const [mode, setMode] = useState<ModeName>("default");
   const [faceTracking, setFaceTracking] = useState(false);
+  const [autoDetectFacecam, setAutoDetectFacecam] = useState(true);
+  const [facecamRect, setFacecamRect] = useState("0.70,0.70,0.30,0.30");
   const [captionsEnabled, setCaptionsEnabled] = useState(true);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -58,7 +60,7 @@ export function YouTubeDownloader({ onProjectCreated }: { onProjectCreated: (id:
     if (!analysis || !selectedCandidates.length) return;
     setError("");
     try {
-      setAnalysis(await createYouTubeProject(analysis.id, { candidateIds: selectedCandidates, mode, faceTracking, captionsEnabled }));
+      setAnalysis(await createYouTubeProject(analysis.id, { candidateIds: selectedCandidates, mode, faceTracking, captionsEnabled, ...(!autoDetectFacecam && mode === "gaming" ? { facecamRect } : {}) }));
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
   }
 
@@ -162,7 +164,7 @@ export function YouTubeDownloader({ onProjectCreated }: { onProjectCreated: (id:
         const samples = analysis.result!.signals.windows.filter((window) => window.start < candidate.end && window.end > candidate.start && window.samples.length).flatMap((window) => window.samples).slice(0, 2);
         return <label className={`youtube-candidate ${selected ? "selected" : ""}`} key={candidate.id}><input type="checkbox" checked={selected} onChange={(event) => { const checked = event.currentTarget.checked; setSelectedCandidates((current) => checked ? [...current, candidate.id].slice(0, 10) : current.filter((id) => id !== candidate.id)); }} /><span className="youtube-candidate-main"><span className="youtube-candidate-title"><strong>{candidate.title}</strong><b>{candidate.score.toFixed(1)}/10</b></span><small>{timeline(candidate.start)}–{timeline(candidate.end)} · {timeline(candidate.end - candidate.start)}</small><span>{candidate.hook}</span><small>{candidate.reason}</small>{candidate.signalScores && <small className="activity-summary">Chat {candidate.signalScores.chat.toFixed(1)}/10 · Replay {candidate.signalScores.heatmap.toFixed(1)}/10</small>}{samples.map((sample, index) => <small className="chat-sample" key={index}>“{sample}”</small>)}</span></label>;
       })}</div>
-      <div className="youtube-create-settings"><label className="form-field"><span>Render mode</span><select value={mode} onChange={(event) => setMode(event.currentTarget.value as ModeName)}>{modes.map((item) => <option value={item.name} key={item.name}>{item.name}</option>)}</select></label><label className="upload-option"><input type="checkbox" checked={faceTracking} onChange={(event) => setFaceTracking(event.currentTarget.checked)} /><span><strong>Track faces</strong><small>Keep the speaker in frame</small></span></label><label className="upload-option"><input type="checkbox" checked={captionsEnabled} onChange={(event) => setCaptionsEnabled(event.currentTarget.checked)} /><span><strong>Add subtitles</strong><small>Burn captions into clips</small></span></label><button className="button primary" disabled={!selectedCandidates.length} onClick={() => void makeClips()}>Download & render {selectedCandidates.length} clip{selectedCandidates.length === 1 ? "" : "s"}</button></div>
+      <div className="youtube-create-settings"><label className="form-field"><span>Render mode</span><select value={mode} onChange={(event) => setMode(event.currentTarget.value as ModeName)}>{modes.map((item) => <option value={item.name} key={item.name}>{item.name}</option>)}</select></label>{mode === "gaming" && <label className="upload-option"><input type="checkbox" checked={autoDetectFacecam} onChange={(event) => setAutoDetectFacecam(event.currentTarget.checked)} /><span><strong>Auto-detect facecam</strong><small>Find the camera region; uncheck for manual placement</small></span></label>}{mode === "gaming" && !autoDetectFacecam && <label className="form-field"><span>Facecam x,y,w,h</span><input value={facecamRect} onChange={(event) => setFacecamRect(event.currentTarget.value)} aria-label="Facecam rectangle normalized x,y,w,h" /></label>}<label className="upload-option"><input type="checkbox" checked={faceTracking} onChange={(event) => setFaceTracking(event.currentTarget.checked)} /><span><strong>Track faces</strong><small>Keep the speaker in frame</small></span></label><label className="upload-option"><input type="checkbox" checked={captionsEnabled} onChange={(event) => setCaptionsEnabled(event.currentTarget.checked)} /><span><strong>Add subtitles</strong><small>Burn captions into clips</small></span></label><button className="button primary" disabled={!selectedCandidates.length} onClick={() => void makeClips()}>Download & render {selectedCandidates.length} clip{selectedCandidates.length === 1 ? "" : "s"}</button></div>
     </div>}
     {error && <p className="error" role="alert">{error}</p>}
     <p className="youtube-legal">Use only videos you own or have permission to process. Analysis accepts completed videos and livestream replays; active live streams are not supported.</p>

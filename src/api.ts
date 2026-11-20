@@ -513,7 +513,38 @@ export function createJobApi(
         const jobId = decodeURIComponent(renderClipMatch[1]!);
         const job = store.get(jobId);
         if (!job?.result) return json({ error: "Completed job not found" }, 404);
+        if (job.status === "queued" || job.status === "running") return json({ error: "Job is already processing" }, 409);
         if (!job.result.clips.some((clip) => clip.id === renderClipMatch[2])) return json({ error: "Clip not found" }, 404);
+        let mode = job.mode;
+        let faceTracking = job.faceTracking;
+        let captionsEnabled = job.captionsEnabled;
+        let facecamRect = job.facecamRect;
+        if (request.headers.get("content-type")?.includes("application/json")) {
+          let payload: unknown;
+          try { payload = await request.json(); }
+          catch { return json({ error: "Render settings must be valid JSON" }, 400); }
+          if (!isRecord(payload)) return json({ error: "Render settings must be a JSON object" }, 400);
+          try {
+            if (payload.mode !== undefined) {
+              if (typeof payload.mode !== "string") return json({ error: "mode must be a valid mode name" }, 400);
+              mode = getMode(payload.mode).name as ModeName;
+            }
+            if (payload.faceTracking !== undefined) {
+              if (typeof payload.faceTracking !== "boolean") return json({ error: "faceTracking must be a boolean" }, 400);
+              faceTracking = payload.faceTracking;
+            }
+            if (payload.captionsEnabled !== undefined) {
+              if (typeof payload.captionsEnabled !== "boolean") return json({ error: "captionsEnabled must be a boolean" }, 400);
+              captionsEnabled = payload.captionsEnabled;
+            }
+            if (Object.hasOwn(payload, "facecamRect")) {
+              if (payload.facecamRect === null) facecamRect = null;
+              else if (typeof payload.facecamRect === "string") facecamRect = parseFacecamRect(payload.facecamRect);
+              else return json({ error: "facecamRect must be normalized x,y,w,h or null for automatic detection" }, 400);
+            }
+          } catch (error) { return json({ error: error instanceof Error ? error.message : String(error) }, 400); }
+          store.updateRenderSettings(jobId, { mode, faceTracking, captionsEnabled, facecamRect });
+        }
         const jobDir = path.join(jobRoot, jobId);
         let edits: Record<string, ClipRenderEdit> = {};
         try { edits = JSON.parse(await readFile(path.join(jobDir, "edits.json"), "utf8")) as Record<string, ClipRenderEdit>; }
@@ -522,7 +553,7 @@ export function createJobApi(
         edits[clipId] = { ...edits[clipId], renderStatus: "queued", renderError: undefined };
         await writeFile(path.join(jobDir, "edits.json"), JSON.stringify(edits, null, 2));
         store.requeue(jobId);
-        queue.enqueue({ id: jobId, videoPath: job.videoPath, force: true, operation: "render", faceTracking: job.faceTracking, captionsEnabled: job.captionsEnabled, clipId, mode: job.mode, facecamRect: job.facecamRect });
+        queue.enqueue({ id: jobId, videoPath: job.videoPath, force: true, operation: "render", faceTracking, captionsEnabled, clipId, mode, facecamRect });
         return json({ job: store.get(jobId) }, 202);
       }
 
@@ -618,6 +649,7 @@ export function createJobApi(
         let mode = job.mode;
         let faceTracking = job.faceTracking;
         let captionsEnabled = job.captionsEnabled;
+        let facecamRect = job.facecamRect;
         let renderEveryClip = false;
         if (request.headers.get("content-type")?.includes("application/json")) {
           let payload: unknown;
@@ -637,8 +669,15 @@ export function createJobApi(
             if (typeof payload.captionsEnabled !== "boolean") return json({ error: "captionsEnabled must be a boolean" }, 400);
             captionsEnabled = payload.captionsEnabled;
           }
+          if (Object.hasOwn(payload, "facecamRect")) {
+            if (payload.facecamRect === null) facecamRect = null;
+            else if (typeof payload.facecamRect === "string") {
+              try { facecamRect = parseFacecamRect(payload.facecamRect); }
+              catch (error) { return json({ error: error instanceof Error ? error.message : String(error) }, 400); }
+            } else return json({ error: "facecamRect must be normalized x,y,w,h or null for automatic detection" }, 400);
+          }
           renderEveryClip = true;
-          store.updateRenderSettings(jobId, { mode, faceTracking, captionsEnabled });
+          store.updateRenderSettings(jobId, { mode, faceTracking, captionsEnabled, facecamRect });
         }
         const jobDir = path.join(jobRoot, jobId);
         let edits: Record<string, ClipRenderEdit> = {};
@@ -649,7 +688,7 @@ export function createJobApi(
         }
         await writeFile(path.join(jobDir, "edits.json"), JSON.stringify(edits, null, 2));
         store.requeue(jobId);
-        queue.enqueue({ id: jobId, videoPath: job.videoPath, force: true, operation: "render", faceTracking, captionsEnabled, onlyStale: !renderEveryClip, mode, facecamRect: job.facecamRect });
+        queue.enqueue({ id: jobId, videoPath: job.videoPath, force: true, operation: "render", faceTracking, captionsEnabled, onlyStale: !renderEveryClip, mode, facecamRect });
         return json({ job: store.get(jobId) }, 202);
       }
 

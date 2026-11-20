@@ -9,7 +9,7 @@ import { extractAudio } from "./pipeline/extract.ts";
 import { transcribe } from "./pipeline/transcribe.ts";
 import { splitSentences, transcriptSentences } from "./pipeline/sentences.ts";
 import { saveJobMetadata } from "./job-metadata.ts";
-import { getMode, type ModeName } from "./modes.ts";
+import { getMode, parseFacecamRect, type ModeName } from "./modes.ts";
 import { defaultProjectName, normalizeProjectName } from "./project-name.ts";
 import { JobQueue } from "./state/queue.ts";
 import { JobStore } from "./state/jobs.ts";
@@ -279,6 +279,7 @@ export function createYouTubeAnalysisApi(
     const mode = typeof payload.mode === "string" ? getMode(payload.mode).name as ModeName : "default";
     const faceTracking = payload.faceTracking === true;
     const captionsEnabled = payload.captionsEnabled !== false;
+    const facecamRect = typeof payload.facecamRect === "string" ? parseFacecamRect(payload.facecamRect) : null;
 
     job.status = "creating"; job.stage = "Downloading selected moments"; job.progress = 0;
     const id = randomUUID();
@@ -343,9 +344,9 @@ export function createYouTubeAnalysisApi(
       await rm(sourceDirectory, { recursive: true, force: true });
       await saveJobMetadata(projectDirectory, { mode });
       const language = transcriptLanguage(transcript.language);
-      const jobRecord = store.create(id, sourcePath, faceTracking, language, mode, null, normalizeProjectName(result.title || defaultProjectName(sourcePath)), captionsEnabled);
+      const jobRecord = store.create(id, sourcePath, faceTracking, language, mode, facecamRect, normalizeProjectName(result.title || defaultProjectName(sourcePath)), captionsEnabled);
       dbCreated = true;
-      queue.enqueue({ id, videoPath: sourcePath, force: false, faceTracking, captionsEnabled, language, mode });
+      queue.enqueue({ id, videoPath: sourcePath, force: false, faceTracking, captionsEnabled, language, mode, facecamRect });
       job.projectId = jobRecord.id; job.status = "completed"; job.stage = "Project created"; job.progress = 100;
       await rm(job.directory, { recursive: true, force: true });
     } catch (error) {
@@ -393,6 +394,8 @@ export function createYouTubeAnalysisApi(
           }
           if (payload.faceTracking !== undefined && typeof payload.faceTracking !== "boolean") return response({ error: "faceTracking must be a boolean" }, 400);
           if (payload.captionsEnabled !== undefined && typeof payload.captionsEnabled !== "boolean") return response({ error: "captionsEnabled must be a boolean" }, 400);
+          if (payload.facecamRect !== undefined && typeof payload.facecamRect !== "string") return response({ error: "facecamRect must be x,y,w,h using normalized values" }, 400);
+          if (typeof payload.facecamRect === "string") parseFacecamRect(payload.facecamRect);
           const selectedIds = payload.candidateIds;
           if (!Array.isArray(selectedIds) || !selectedIds.length || selectedIds.some((value) => typeof value !== "string")) return response({ error: "Choose at least one AI-selected moment" }, 400);
           if (selectedIds.length > 10) return response({ error: "Choose no more than 10 moments" }, 400);

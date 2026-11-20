@@ -194,9 +194,10 @@ Rules for this phase:
   /modes. Re-render and retry use the job's stored mode.
 - 9.4 Split-screen layout (gaming): add `layout: "center-crop" | "split"` to the
   profile. Split = facecam region on top, main content below, stacked into 1080x1920
-  (crop + scale + vstack in filter_complex). Facecam rectangle is configurable
-  (normalized x, y, w, h) via profile default and per-job override (CLI flag and
-  UI field). No auto-detection yet. Captions sit near the seam or lower third.
+  (crop + scale + vstack in filter_complex). Facecam rectangle is auto-detected
+  per clip from stable YuNet detections; manual normalized x, y, w, h remains
+  available through the CLI flag and UI override. Captions sit near the seam or
+  lower third.
   Tests: pure function that builds the filter graph string (snapshot-style).
   Keep the FFmpeg command commented.
 - 9.5 Audio energy scoring: compute loudness per sentence window with FFmpeg,
@@ -269,6 +270,7 @@ Rencana
 - CLI: `bun run src/cli.ts video.mp4 --mode gaming --facecam-rect 0.68,0.04,0.28,0.28`.
 - The UI loads Default, Gaming, and Podcast from `GET /modes`; saved jobs reuse their mode for rerenders.
 - gaming: split facecam layout, audioWeight 0.3, gaming glossary, Bold captions.
+- Gaming facecam position is auto-detected per clip unless a manual rectangle is set; missing/stale detections fall back to the Gaming default.
 - podcast: center-crop layout, audioWeight 0.1, Clean captions.
 - default: current center-crop behavior, Classic captions, audioWeight 0.
 - Audio energy blends percentile-normalized RMS loudness with the LLM score; weight 0 leaves ranking unchanged.

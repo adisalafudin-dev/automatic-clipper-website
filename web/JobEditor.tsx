@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { JobView, UiClipEdit, UiSentence } from "../src/types.ts";
-import type { ModeName, ModeProfile } from "../src/modes.ts";
+import { MODES, type ModeName, type ModeProfile } from "../src/modes.ts";
 import { createClip, getModes, getTranscript, removeClip, renderClip, renderStale, retryJob, saveClipEdit } from "./api.ts";
 import { clampRange, durationWarning, formatTime, parseTime, sentenceSelectionRange, snapRangeToWords, type TimeRange } from "./lib/trim.ts";
 
@@ -8,6 +8,8 @@ type JobDetail = { job: JobView; edits: Record<string, UiClipEdit> };
 type Props = { detail: JobDetail; onEditSaved: () => Promise<void> };
 
 const clock = (ms: number) => formatTime(ms).slice(0, -4);
+const isDefaultGamingFacecamRect = (rect: typeof MODES.gaming.facecamRect | null) =>
+  !rect || (Math.abs(rect.x - 0.7) < 0.0001 && Math.abs(rect.y - 0.7) < 0.0001 && Math.abs(rect.w - 0.3) < 0.0001 && Math.abs(rect.h - 0.3) < 0.0001);
 
 export function JobEditor({ detail, onEditSaved }: Props) {
   const { job } = detail;
@@ -27,6 +29,8 @@ export function JobEditor({ detail, onEditSaved }: Props) {
   const [renderMode, setRenderMode] = useState<ModeName>(job.mode);
   const [renderFaceTracking, setRenderFaceTracking] = useState(job.faceTracking);
   const [renderCaptions, setRenderCaptions] = useState(job.captionsEnabled);
+  const [autoDetectFacecam, setAutoDetectFacecam] = useState(isDefaultGamingFacecamRect(job.facecamRect));
+  const [renderFacecamRect, setRenderFacecamRect] = useState(job.facecamRect ? `${job.facecamRect.x},${job.facecamRect.y},${job.facecamRect.w},${job.facecamRect.h}` : "0.70,0.70,0.30,0.30");
   const [modes, setModes] = useState<ModeProfile[]>([]);
   const selectionAnchor = useRef<number | null>(null);
   const dirty = useRef(false);
@@ -39,6 +43,8 @@ export function JobEditor({ detail, onEditSaved }: Props) {
     setRenderMode(job.mode);
     setRenderFaceTracking(job.faceTracking);
     setRenderCaptions(job.captionsEnabled);
+    setAutoDetectFacecam(isDefaultGamingFacecamRect(job.facecamRect));
+    setRenderFacecamRect(job.facecamRect ? `${job.facecamRect.x},${job.facecamRect.y},${job.facecamRect.w},${job.facecamRect.h}` : "0.70,0.70,0.30,0.30");
   }, [job.id]);
 
   useEffect(() => {
@@ -188,7 +194,7 @@ export function JobEditor({ detail, onEditSaved }: Props) {
   };
   const rerenderWithSettings = async () => {
     try {
-      await renderStale(job.id, { mode: renderMode, faceTracking: renderFaceTracking, captionsEnabled: renderCaptions });
+      await renderStale(job.id, { mode: renderMode, faceTracking: renderFaceTracking, captionsEnabled: renderCaptions, facecamRect: renderMode === "gaming" && !autoDetectFacecam ? renderFacecamRect : null });
       await onEditSaved();
     } catch (reason) {
       setLoadError(reason instanceof Error ? reason.message : String(reason));
@@ -199,7 +205,7 @@ export function JobEditor({ detail, onEditSaved }: Props) {
     <header className="editor-heading"><div><span className="eyebrow">JOB EDITOR</span><h2>{job.filename}</h2></div><div className="editor-actions">{clips.length > 0 && <button className="button" disabled={job.status === "running" || job.status === "queued"} onClick={() => void renderStale(job.id).then(onEditSaved).catch((reason: unknown) => setLoadError(reason instanceof Error ? reason.message : String(reason)))}>Render all stale</button>}{clips.length === 0 && job.status === "completed" && <button className="button" onClick={() => void retryJob(job.id).then(onEditSaved).catch((reason: unknown) => setLoadError(reason instanceof Error ? reason.message : String(reason)))}>Retry clip generation</button>}<span className={`badge ${job.status}`}>{job.status}</span></div></header>
     {loadError && <p className="error" role="alert">{loadError}</p>}
     {job.status !== "completed" && <div className="editor-progress"><span>{job.error ? `Failed: ${job.error}` : `${job.stage} · ${job.progress}%`}</span><div className="progress-track"><div className="progress-fill" style={{ width: `${job.progress}%` }} /></div></div>}
-    {clips.length > 0 && <details className="job-render-settings"><summary><span><strong>Render settings</strong><small>Mode: {job.mode} · Face tracking: {job.faceTracking ? "On" : "Off"} · Subtitles: {job.captionsEnabled ? "On" : "Off"}</small></span><span className="router-settings-chevron" aria-hidden="true">⌄</span></summary><div className="job-render-settings-body"><p className="muted">Change these options and re-render every clip. Your selections are saved with this project.</p><label className="form-field"><span>Mode</span><select value={renderMode} disabled={job.status === "running" || job.status === "queued"} onChange={(event) => setRenderMode(event.currentTarget.value as ModeName)}>{modes.map((item) => <option value={item.name} key={item.name}>{item.name}</option>)}</select></label><div className="job-render-toggles"><label className="upload-option"><input type="checkbox" checked={renderFaceTracking} disabled={job.status === "running" || job.status === "queued"} onChange={(event) => setRenderFaceTracking(event.currentTarget.checked)} /><span><strong>Track faces</strong><small>Keep the speaker in frame</small></span></label><label className="upload-option"><input type="checkbox" checked={renderCaptions} disabled={job.status === "running" || job.status === "queued"} onChange={(event) => setRenderCaptions(event.currentTarget.checked)} /><span><strong>Add subtitles</strong><small>Burn captions into clips</small></span></label></div><div className="job-render-actions"><span className="muted">All clips will be rendered again.</span><button className="button primary" disabled={job.status === "running" || job.status === "queued"} onClick={() => void rerenderWithSettings()}>Re-render all clips</button></div></div></details>}
+    {clips.length > 0 && <details className="job-render-settings"><summary><span><strong>Render settings</strong><small>Mode: {job.mode} · Face tracking: {job.faceTracking ? "On" : "Off"} · Subtitles: {job.captionsEnabled ? "On" : "Off"}</small></span><span className="router-settings-chevron" aria-hidden="true">⌄</span></summary><div className="job-render-settings-body"><p className="muted">Change these options and re-render every clip. Your selections are saved with this project.</p><label className="form-field"><span>Mode</span><select value={renderMode} disabled={job.status === "running" || job.status === "queued"} onChange={(event) => setRenderMode(event.currentTarget.value as ModeName)}>{modes.map((item) => <option value={item.name} key={item.name}>{item.name}</option>)}</select></label>{renderMode === "gaming" && <><label className="upload-option"><input type="checkbox" checked={autoDetectFacecam} disabled={job.status === "running" || job.status === "queued"} onChange={(event) => setAutoDetectFacecam(event.currentTarget.checked)} /><span><strong>Auto-detect facecam</strong><small>Find the camera region; uncheck for manual placement</small></span></label>{!autoDetectFacecam && <label className="form-field"><span>Facecam x,y,w,h</span><input value={renderFacecamRect} disabled={job.status === "running" || job.status === "queued"} onChange={(event) => setRenderFacecamRect(event.currentTarget.value)} aria-label="Facecam rectangle normalized x,y,w,h" /></label>}</>}<div className="job-render-toggles"><label className="upload-option"><input type="checkbox" checked={renderFaceTracking} disabled={job.status === "running" || job.status === "queued"} onChange={(event) => setRenderFaceTracking(event.currentTarget.checked)} /><span><strong>Track faces</strong><small>Keep the speaker in frame</small></span></label><label className="upload-option"><input type="checkbox" checked={renderCaptions} disabled={job.status === "running" || job.status === "queued"} onChange={(event) => setRenderCaptions(event.currentTarget.checked)} /><span><strong>Add subtitles</strong><small>Burn captions into clips</small></span></label></div><div className="job-render-actions"><span className="muted">All clips will be rendered again.</span><button className="button primary" disabled={job.status === "running" || job.status === "queued"} onClick={() => void rerenderWithSettings()}>Re-render all clips</button></div></div></details>}
     <div className="editor-grid">
       <aside className="editor-column clip-column"><h3>Clips <span>{clips.length}</span></h3>{clips.length ? clips.map((clip) => {
         const status = detail.edits[clip.id]?.renderStatus ?? "done";
@@ -230,7 +236,7 @@ export function JobEditor({ detail, onEditSaved }: Props) {
             <div className="trim-tool-group"><span>Playback</span><div><button onClick={() => { if (videoRef.current) videoRef.current.currentTime = range.startMs / 1000; }}>Jump to start</button><button onClick={() => { if (videoRef.current) videoRef.current.currentTime = range.endMs / 1000; }}>Jump to end</button><button onClick={() => updateRange({ startMs: detail.edits[selected.id]?.origStartMs ?? selected.start, endMs: detail.edits[selected.id]?.origEndMs ?? selected.end })}>Reset</button><label><input type="checkbox" checked={snap} onChange={(event) => setSnap(event.currentTarget.checked)} /> Snap to words</label></div></div>
           </div>
           <p className="trim-status">Duration {formatTime(range.endMs - range.startMs)} · {saveState}{warning && <span className="warning"> · Outside 30–90 sec</span>}</p>
-          <div className="render-controls"><button className="button primary" disabled={job.status === "running" || job.status === "queued" || renderStatus === "queued" || renderStatus === "rendering"} onClick={() => void renderClip(job.id, selected.id).then(onEditSaved).catch((reason: unknown) => setLoadError(reason instanceof Error ? reason.message : String(reason)))}>{renderStatus === "queued" || renderStatus === "rendering" ? "Rendering…" : renderStatus === "done" ? "Render again" : "Render clip"}</button><span className={`badge ${renderStatus}`}>{renderStatus}</span><button className="button danger" disabled={job.status === "running" || job.status === "queued"} onClick={() => void deleteSelectedClip()}>Delete clip</button></div>
+          <div className="render-controls"><button className="button primary" disabled={job.status === "running" || job.status === "queued" || renderStatus === "queued" || renderStatus === "rendering"} onClick={() => void renderClip(job.id, selected.id, { mode: renderMode, faceTracking: renderFaceTracking, captionsEnabled: renderCaptions, facecamRect: renderMode === "gaming" && !autoDetectFacecam ? renderFacecamRect : null }).then(onEditSaved).catch((reason: unknown) => setLoadError(reason instanceof Error ? reason.message : String(reason)))}>{renderStatus === "queued" || renderStatus === "rendering" ? "Rendering…" : renderStatus === "done" ? "Render again" : "Render clip"}</button><span className={`badge ${renderStatus}`}>{renderStatus}</span><button className="button danger" disabled={job.status === "running" || job.status === "queued"} onClick={() => void deleteSelectedClip()}>Delete clip</button></div>
           {detail.edits[selected.id]?.renderError && <p className="error" role="alert">{detail.edits[selected.id]!.renderError}</p>}
           {renderStatus === "done" && <div className="rendered-result"><h4>Rendered clip</h4><video controls preload="metadata" src={`/jobs/${encodeURIComponent(job.id)}/clips/${encodeURIComponent(selected.id)}/file`} /><a href={`/jobs/${encodeURIComponent(job.id)}/clips/${encodeURIComponent(selected.id)}/file`} download={`${selected.id}.mp4`}>Download clip</a></div>}
         </> : <p className="muted">Select a clip to preview.</p>}

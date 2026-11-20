@@ -229,9 +229,9 @@ export class JobStore {
     ]);
   }
 
-  updateRenderSettings(id: string, settings: { mode: ModeName; faceTracking: boolean; captionsEnabled: boolean }): void {
-    this.update(id, "UPDATE jobs SET mode=?, face_tracking=?, captions_enabled=?, updated_at=? WHERE id=?", [
-      settings.mode, settings.faceTracking ? 1 : 0, settings.captionsEnabled ? 1 : 0, new Date().toISOString(), id,
+  updateRenderSettings(id: string, settings: { mode: ModeName; faceTracking: boolean; captionsEnabled: boolean; facecamRect: FacecamRect | null }): void {
+    this.update(id, "UPDATE jobs SET mode=?, face_tracking=?, captions_enabled=?, facecam_rect=?, updated_at=? WHERE id=?", [
+      settings.mode, settings.faceTracking ? 1 : 0, settings.captionsEnabled ? 1 : 0, settings.facecamRect ? JSON.stringify(settings.facecamRect) : null, new Date().toISOString(), id,
     ]);
   }
 

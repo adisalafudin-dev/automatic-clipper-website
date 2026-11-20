@@ -17,6 +17,7 @@ export function App() {
   const [faceTracking, setFaceTracking] = useState(false);
   const [captionsEnabled, setCaptionsEnabled] = useState(true);
   const [mode, setMode] = useState<ModeName>("default");
+  const [autoDetectFacecam, setAutoDetectFacecam] = useState(true);
   const [facecamRect, setFacecamRect] = useState("0.70,0.70,0.30,0.30");
   const [modes, setModes] = useState<ModeProfile[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -63,7 +64,8 @@ export function App() {
     setUploadProgress(0);
     setError("");
     try {
-      const job = await uploadVideo(file, faceTracking, "auto", mode, mode === "gaming" ? facecamRect : undefined, projectName, captionsEnabled, setUploadProgress);
+      const manualFacecamRect = mode === "gaming" && !autoDetectFacecam ? facecamRect : undefined;
+      const job = await uploadVideo(file, faceTracking, "auto", mode, manualFacecamRect, projectName, captionsEnabled, setUploadProgress);
       setSelectedId(job.id);
       setSelectedJob({ job, edits: {}, feedback: {} });
       setFile(null);
@@ -132,9 +134,10 @@ export function App() {
         <div className="upload-settings">
           <label className="form-field"><span>Project name</span><input value={projectName} maxLength={100} disabled={uploading} onChange={(event) => setProjectName(event.currentTarget.value)} placeholder="Name this video" /></label>
           <label className="form-field"><span>Mode</span><select value={mode} disabled={uploading} onChange={(event) => setMode(event.currentTarget.value as ModeName)}>{modes.map((item) => <option value={item.name} key={item.name}>{item.name}</option>)}</select></label>
-          {mode === "gaming" && <label className="form-field"><span>Facecam x,y,w,h</span><input value={facecamRect} disabled={uploading} onChange={(event) => setFacecamRect(event.currentTarget.value)} aria-label="Facecam rectangle normalized x,y,w,h" /></label>}
+          {mode === "gaming" && !autoDetectFacecam && <label className="form-field"><span>Facecam x,y,w,h</span><input value={facecamRect} disabled={uploading} onChange={(event) => setFacecamRect(event.currentTarget.value)} aria-label="Facecam rectangle normalized x,y,w,h" /></label>}
         </div>
         <div className="upload-options">
+          {mode === "gaming" && <label className="upload-option"><input type="checkbox" checked={autoDetectFacecam} disabled={uploading} onChange={(event) => setAutoDetectFacecam(event.currentTarget.checked)} /><span><strong>Auto-detect facecam</strong><small>Find the camera region in each clip; uncheck to set it manually</small></span></label>}
           <label className="upload-option"><input type="checkbox" checked={faceTracking} disabled={uploading} onChange={(event) => setFaceTracking(event.currentTarget.checked)} /><span><strong>Track faces</strong><small>Keep the speaker in frame</small></span></label>
           <label className="upload-option"><input type="checkbox" checked={captionsEnabled} disabled={uploading} onChange={(event) => setCaptionsEnabled(event.currentTarget.checked)} /><span><strong>Add subtitles</strong><small>Burn captions into the clips</small></span></label>
         </div>

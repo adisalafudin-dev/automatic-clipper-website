@@ -1,8 +1,10 @@
 import path from "node:path";
 import { createHash } from "node:crypto";
 import type * as Ort from "onnxruntime-node";
+import type { FacecamRect } from "../modes.ts";
 
 export type FaceCenterSample = { time: number; centerX: number };
+export type FaceDetectionSample = FaceCenterSample & { centerY: number; width: number; height: number; score: number };
 export type VideoDimensions = { width: number; height: number };
 
 const MODEL_FILE = "face_detection_yunet_2023mar.onnx";
@@ -39,6 +41,39 @@ export function smoothFaceCenters(samples: FaceCenterSample[], alpha = 0.35): Fa
   return smoothed;
 }
 
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
+}
+
+export function inferFacecamRect(samples: FaceDetectionSample[], dimensions: VideoDimensions): FacecamRect | null {
+  if (samples.length < 2 || dimensions.width <= 0 || dimensions.height <= 0) return null;
+  const valid = samples.filter((sample) =>
+    Number.isFinite(sample.centerX) && Number.isFinite(sample.centerY) && Number.isFinite(sample.width) &&
+    Number.isFinite(sample.height) && sample.width > 0 && sample.height > 0,
+  );
+  let cluster: FaceDetectionSample[] = [];
+  for (const candidate of valid) {
+    const nearby = valid.filter((sample) => Math.hypot(
+      (sample.centerX - candidate.centerX) / dimensions.width,
+      (sample.centerY - candidate.centerY) / dimensions.height,
+    ) <= 0.12);
+    if (nearby.length > cluster.length || (nearby.length === cluster.length && nearby.reduce((sum, sample) => sum + sample.score, 0) > cluster.reduce((sum, sample) => sum + sample.score, 0))) cluster = nearby;
+  }
+  if (cluster.length < Math.max(2, Math.ceil(samples.length * 0.4))) return null;
+
+  const centerX = median(cluster.map((sample) => sample.centerX)) / dimensions.width;
+  const centerY = median(cluster.map((sample) => sample.centerY)) / dimensions.height;
+  const faceWidth = median(cluster.map((sample) => sample.width)) / dimensions.width;
+  const faceHeight = median(cluster.map((sample) => sample.height)) / dimensions.height;
+  const w = Math.min(0.42, Math.max(0.18, faceWidth * 5));
+  const h = Math.min(0.35, Math.max(0.16, faceHeight * 2.5));
+  const x = Math.min(1 - w, Math.max(0, centerX - w / 2));
+  const y = Math.min(1 - h, Math.max(0, centerY - h / 2));
+  return { x, y, w, h };
+}
+
 async function getSession(): Promise<Ort.InferenceSession> {
   if (!sessionPromise) {
     sessionPromise = (async () => {
@@ -56,7 +91,7 @@ async function getSession(): Promise<Ort.InferenceSession> {
   return sessionPromise;
 }
 
-async function findBestFace(frame: Uint8Array, dimensions: VideoDimensions): Promise<number | null> {
+async function findBestFace(frame: Uint8Array, dimensions: VideoDimensions): Promise<Omit<FaceDetectionSample, "time"> | null> {
   const ort = await import("onnxruntime-node");
   const session = await getSession();
   const scale = Math.min(INPUT_SIZE / dimensions.width, INPUT_SIZE / dimensions.height);
@@ -75,7 +110,7 @@ async function findBestFace(frame: Uint8Array, dimensions: VideoDimensions): Pro
     [session.inputNames[0]!]: new ort.Tensor("float32", tensorData, [1, 3, INPUT_SIZE, INPUT_SIZE]),
   });
   let bestScore = MIN_SCORE;
-  let bestCenter: number | null = null;
+  let bestFace: Omit<FaceDetectionSample, "time"> | null = null;
   for (const stride of [8, 16, 32]) {
     const cls = outputs[`cls_${stride}`]?.data as Float32Array | undefined;
     const obj = outputs[`obj_${stride}`]?.data as Float32Array | undefined;
@@ -91,13 +126,19 @@ async function findBestFace(frame: Uint8Array, dimensions: VideoDimensions): Pro
       const height = Math.exp(boxes[index * 4 + 3]!) * stride;
       if (width <= 0 || height <= 0 || centerY + height / 2 < padY || centerY - height / 2 > padY + resizedHeight) continue;
       bestScore = score;
-      bestCenter = Math.max(0, Math.min(dimensions.width, (centerX - padX) / scale));
+      bestFace = {
+        centerX: Math.max(0, Math.min(dimensions.width, (centerX - padX) / scale)),
+        centerY: Math.max(0, Math.min(dimensions.height, (centerY - padY) / scale)),
+        width: width / scale,
+        height: height / scale,
+        score,
+      };
     }
   }
-  return bestCenter;
+  return bestFace;
 }
 
-async function probeDimensions(videoPath: string): Promise<VideoDimensions> {
+export async function probeVideoDimensions(videoPath: string): Promise<VideoDimensions> {
   const proc = Bun.spawn([
     "ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
     "-of", "json", videoPath,
@@ -113,14 +154,14 @@ async function probeDimensions(videoPath: string): Promise<VideoDimensions> {
   return { width, height };
 }
 
-export async function sampleFaceCenters(
+export async function sampleFaceDetections(
   videoPath: string,
   clipStart: number,
   clipEnd: number,
   dimensions?: VideoDimensions,
   signal?: AbortSignal,
-): Promise<FaceCenterSample[]> {
-  const video = dimensions ?? await probeDimensions(videoPath);
+): Promise<FaceDetectionSample[]> {
+  const video = dimensions ?? await probeVideoDimensions(videoPath);
   const proc = Bun.spawn([
     "ffmpeg", "-hide_banner", "-loglevel", "error", "-ss", (clipStart / 1000).toFixed(3),
     "-t", ((clipEnd - clipStart) / 1000).toFixed(3), "-i", videoPath,
@@ -134,13 +175,13 @@ export async function sampleFaceCenters(
   const frameBytes = INPUT_SIZE * INPUT_SIZE * 3;
   const bytes = new Uint8Array(buffer);
   if (bytes.length % frameBytes !== 0) throw new Error("FFmpeg returned an incomplete face sample frame");
-  const samples: FaceCenterSample[] = [];
+  const samples: FaceDetectionSample[] = [];
   for (let offset = 0, index = 0; offset < bytes.length; offset += frameBytes, index++) {
     if (signal?.aborted) throw new Error("Face tracking cancelled");
-    const centerX = await findBestFace(bytes.subarray(offset, offset + frameBytes), video);
-    if (centerX !== null) samples.push({ time: index * SAMPLE_SECONDS, centerX });
+    const face = await findBestFace(bytes.subarray(offset, offset + frameBytes), video);
+    if (face !== null) samples.push({ time: index * SAMPLE_SECONDS, ...face });
   }
-  return smoothFaceCenters(samples);
+  return samples;
 }
 
 export const YUNET_MODEL_URL = MODEL_URL;

@@ -400,7 +400,7 @@ test("browser upload supports preview, trim and caption edits, and queued rerend
   let rerenderFaceTracking = false;
   let rerenderOnlyStale = false;
   let rerenderMode = "";
-  let rerenderFacecamRect: { x: number; y: number; w: number; h: number } | null = null;
+  const rerenderFacecamRects: Array<{ x: number; y: number; w: number; h: number } | null> = [];
   const queue = new JobQueue(store, async (videoPath, jobDir, _force, _report, options) => {
     faceTrackingRequested = options.faceTracking === true;
     captionsEnabledRequested = options.captionsEnabled !== false;
@@ -420,7 +420,7 @@ test("browser upload supports preview, trim and caption edits, and queued rerend
     rerenderFaceTracking = faceTracking;
     rerenderOnlyStale = onlyStale === true;
     rerenderMode = mode ?? "";
-    rerenderFacecamRect = facecamRect ?? null;
+    rerenderFacecamRects.push(facecamRect ?? null);
     report("rendering", 0);
     await Bun.sleep(10);
     report("rendering", 100);
@@ -497,10 +497,37 @@ test("browser upload supports preview, trim and caption edits, and queued rerend
     expect(rerenderFaceTracking).toBe(true);
     expect(rerenderOnlyStale).toBe(true);
     expect(rerenderMode).toBe("gaming");
-    expect(JSON.stringify(rerenderFacecamRect)).toBe('{"x":0.7,"y":0.7,"w":0.3,"h":0.3}');
+    expect(JSON.stringify(rerenderFacecamRects[0])).toBe('{"x":0.7,"y":0.7,"w":0.3,"h":0.3}');
     const updated = store.get(created.id)!;
     expect(updated.result?.clips).toHaveLength(1);
     expect(updated.result?.mode).toBe("gaming");
+
+    const autoRerender = await fetch(`${baseUrl}/jobs/${created.id}/render`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "gaming", faceTracking: true, captionsEnabled: false, facecamRect: null }),
+    });
+    expect(autoRerender.status).toBe(202);
+    await waitForStatus(baseUrl, created.id, "completed");
+    expect(store.get(created.id)?.facecamRect).toBeNull();
+    expect(JSON.stringify(rerenderFacecamRects[1])).toBe("null");
+
+    const manualRerender = await fetch(`${baseUrl}/jobs/${created.id}/render`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "gaming", faceTracking: true, captionsEnabled: false, facecamRect: "0.1,0.65,0.3,0.25" }),
+    });
+    expect(manualRerender.status).toBe(202);
+    await waitForStatus(baseUrl, created.id, "completed");
+    expect(store.get(created.id)?.facecamRect).toEqual({ x: 0.1, y: 0.65, w: 0.3, h: 0.25 });
+    expect(rerenderFacecamRects[2]).toEqual({ x: 0.1, y: 0.65, w: 0.3, h: 0.25 });
+
+    const singleClipAutoRerender = await fetch(`${baseUrl}/jobs/${created.id}/clips/clip-01/render`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "gaming", faceTracking: true, captionsEnabled: false, facecamRect: null }),
+    });
+    expect(singleClipAutoRerender.status).toBe(202);
+    await waitForStatus(baseUrl, created.id, "completed");
+    expect(store.get(created.id)?.facecamRect).toBeNull();
+    expect(JSON.stringify(rerenderFacecamRects[3])).toBe("null");
   } finally {
     server.stop?.();
     db.close();
