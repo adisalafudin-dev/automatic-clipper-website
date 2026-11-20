@@ -17,7 +17,7 @@ import {
   buildActivityWindows, captionsToTranscript, extractHeatmap, parseCaptionCues, parseLiveChatJsonl, selectSpikeRanges,
   type YouTubeAnalysisSignals,
 } from "./youtube-analysis.ts";
-import { buildYouTubeAnalysisArgs, buildYouTubeAudioArgs, buildYouTubeMetadataArgs, buildYouTubeSectionArgs, validateYouTubeRequest } from "./youtube-download.ts";
+import { buildYouTubeAnalysisArgs, buildYouTubeAudioArgs, buildYouTubeMetadataArgs, buildYouTubeSectionArgs, isYouTubeRateLimitError, validateYouTubeRequest } from "./youtube-download.ts";
 
 const MAX_AUDIO_FALLBACK_BYTES = 500 * 1024 * 1024;
 const MAX_ANALYSIS_DOWNLOAD_BYTES = 500 * 1024 * 1024;
@@ -194,14 +194,24 @@ export function createYouTubeAnalysisApi(
       if (!Number.isFinite(duration) || duration < 30) throw new Error("Video duration is unavailable or shorter than 30 seconds");
 
       job.stage = "Downloading captions, chat, and metadata"; job.progress = 15;
-      await runProcess(binary, buildYouTubeAnalysisArgs(url, job.directory), job.controller.signal, { directory: job.directory, limit: MAX_ANALYSIS_DOWNLOAD_BYTES });
+      const warnings: string[] = [];
+      let captionRateLimited = false;
+      try {
+        await runProcess(binary, buildYouTubeAnalysisArgs(url, job.directory), job.controller.signal, { directory: job.directory, limit: MAX_ANALYSIS_DOWNLOAD_BYTES });
+      } catch (error) {
+        if (!isYouTubeRateLimitError(error)) throw error;
+        captionRateLimited = true;
+        warnings.push("YouTube rate-limited subtitle requests (HTTP 429); switching to audio-only local transcription.");
+        job.stage = "Subtitle requests were rate-limited; switching to audio fallback";
+        job.progress = 22;
+      }
       const files = await readdir(job.directory);
       const infoFile = files.find((file) => file.endsWith(".info.json"));
       if (infoFile) {
         try { info = JSON.parse(await readFile(path.join(job.directory, infoFile), "utf8")) as InfoJson; }
         catch { /* Keep the first metadata response if sidecar metadata cannot be parsed. */ }
       }
-      const availableCaption = captionFiles(files)[0];
+      const availableCaption = captionRateLimited ? undefined : captionFiles(files)[0];
       let transcript: Transcript;
       if (availableCaption) {
         const cues = parseCaptionCues(await readFile(path.join(job.directory, availableCaption), "utf8"));
@@ -209,7 +219,10 @@ export function createYouTubeAnalysisApi(
         if (!transcript.words.length) throw new Error("YouTube subtitle file was present but contained no usable captions");
       } else {
         const estimated = estimatedAudioBytes(info);
-        if (estimated > MAX_AUDIO_FALLBACK_BYTES) throw new Error(`No captions are available. The estimated audio-only fallback is ${Math.ceil(estimated / 1024 / 1024)} MB, over the 500 MB limit; no audio was downloaded.`);
+        if (estimated > MAX_AUDIO_FALLBACK_BYTES) {
+          const reason = captionRateLimited ? "YouTube rate-limited captions and " : "No captions are available; ";
+          throw new Error(`${reason}the estimated audio-only fallback is ${Math.ceil(estimated / 1024 / 1024)} MB, over the 500 MB limit; no audio was downloaded.`);
+        }
         job.stage = "Downloading audio-only fallback"; job.progress = 30;
         await runProcess(binary, buildYouTubeAudioArgs(url, job.directory), job.controller.signal);
         const audio = (await readdir(job.directory)).find((file) => /^audio\./i.test(file) && /\.(m4a|mp3|opus|webm)$/i.test(file));
@@ -229,7 +242,6 @@ export function createYouTubeAnalysisApi(
       const llm = new RouterClient(process.env, job.controller.signal);
       const ranges = selectSpikeRanges(signals.windows, duration * 1000);
       let selectedCandidates: ClipCandidate[] = [];
-      const warnings: string[] = [];
       for (const range of ranges) {
         const rangeTranscript = { ...transcript, words: transcript.words.filter((word) => word.start < range.end && word.end > range.start) };
         if (!rangeTranscript.words.length) continue;

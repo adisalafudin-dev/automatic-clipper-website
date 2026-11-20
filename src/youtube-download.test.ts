@@ -1,12 +1,18 @@
 import { expect, test } from "bun:test";
 import { createYouTubeDownloadApi } from "./youtube-download-api.ts";
 import path from "node:path";
-import { buildYouTubeAnalysisArgs, buildYouTubeAudioArgs, buildYouTubeDownloadArgs, buildYouTubeMetadataArgs, buildYouTubeSectionArgs, validateYouTubeRequest } from "./youtube-download.ts";
+import { buildYouTubeAnalysisArgs, buildYouTubeAudioArgs, buildYouTubeDownloadArgs, buildYouTubeMetadataArgs, buildYouTubeSectionArgs, isYouTubeRateLimitError, validateYouTubeRequest } from "./youtube-download.ts";
 
 test("validates YouTube URLs and normalizes clip timestamps", () => {
   expect(validateYouTubeRequest({ url: "https://youtu.be/abc123", start: "03:00:00", end: "03:35:00" })).toEqual({
     url: "https://youtu.be/abc123", start: "03:00:00", end: "03:35:00",
   });
+});
+
+test("recognizes YouTube HTTP 429 rate limits without swallowing unrelated errors", () => {
+  expect(isYouTubeRateLimitError("ERROR: Unable to download subtitles: HTTP Error 429: Too Many Requests")).toBe(true);
+  expect(isYouTubeRateLimitError("HTTP Error 403: Forbidden")).toBe(false);
+  expect(isYouTubeRateLimitError(new Error("subtitle parser failed"))).toBe(false);
 });
 
 test("rejects non-YouTube hosts, malformed times, and reversed ranges", () => {

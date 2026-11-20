@@ -8,8 +8,8 @@ Phase: FACE CAM AUTO-DETECTION | Branch: main
 - Added manual rectangle override on upload, YouTube project creation, single-clip rerender, and project rerender settings. Rendered preview cache-busts on every completed render.
 - Legacy Gaming projects using the old bottom-right default now auto-detect when rerendered; custom rectangles remain manual. Face tracking follows the selected region.
 - Detection falls back to the Gaming bottom-right default if the model finds no stable face.
-- `bun run check`: typecheck passes; 101 tests pass with 375 assertions.
-- Existing subtitle-free rendering, YouTube AI Clip Finder, project deletion, retry, upload progress, and 9Router Settings remain available.
+- `bun run check`: typecheck passes; 102 tests pass with 378 assertions.
+- YouTube subtitle HTTP 429 now falls back to audio-only local Whisper, subject to the existing 500 MB limit.
 
 ## Next
 

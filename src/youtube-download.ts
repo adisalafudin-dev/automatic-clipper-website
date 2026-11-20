@@ -2,6 +2,11 @@ import path from "node:path";
 
 export type YouTubeClipRequest = { url: string; start: string; end: string };
 
+export function isYouTubeRateLimitError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  return /\b429\b/.test(message) && /too many requests/i.test(message);
+}
+
 const YOUTUBE_HOSTS = new Set(["youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be"]);
 
 export function validateYouTubeRequest(value: unknown): YouTubeClipRequest {
