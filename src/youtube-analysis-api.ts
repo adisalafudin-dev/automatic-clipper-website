@@ -155,14 +155,20 @@ function languageFromCaption(filename: string): string {
   return match?.[1]?.toLowerCase() ?? "auto";
 }
 
-function estimatedAudioBytes(info: InfoJson): number {
+export function estimatedAudioBytes(info: InfoJson): number {
   if (Array.isArray(info.formats)) {
     const audioFormats = info.formats.filter((format): format is Record<string, unknown> =>
       isRecord(format) && typeof format.acodec === "string" && format.acodec !== "none" && format.vcodec === "none");
-    const best = audioFormats.sort((a, b) => Number(b.abr ?? 0) - Number(a.abr ?? 0))[0];
-    const exact = Number(best?.filesize ?? best?.filesize_approx);
+    const withBitrate = audioFormats.filter((format) => Number(format.abr) > 0);
+    const underLimit = withBitrate.filter((format) => Number(format.abr) <= 64);
+    const selected = (underLimit.length ? underLimit : withBitrate)
+      .sort((a, b) => underLimit.length ? Number(b.abr) - Number(a.abr) : Number(a.abr) - Number(b.abr))[0];
+    const smallestKnown = [...audioFormats].sort((a, b) =>
+      Number(a.filesize ?? a.filesize_approx ?? Number.MAX_SAFE_INTEGER) - Number(b.filesize ?? b.filesize_approx ?? Number.MAX_SAFE_INTEGER))[0];
+    const chosen = selected ?? smallestKnown;
+    const exact = Number(chosen?.filesize ?? chosen?.filesize_approx);
     if (Number.isFinite(exact) && exact > 0) return exact;
-    const abr = Number(best?.abr);
+    const abr = Number(chosen?.abr);
     if (Number.isFinite(abr) && abr > 0 && Number.isFinite(info.duration)) return info.duration! * abr * 1000 / 8;
   }
   return Number.isFinite(info.duration) ? info.duration! * 320_000 / 8 : MAX_AUDIO_FALLBACK_BYTES + 1;

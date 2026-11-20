@@ -65,7 +65,7 @@ export function buildYouTubeAnalysisArgs(url: string, outputDirectory: string): 
 }
 
 export function buildYouTubeAudioArgs(url: string, outputDirectory: string): string[] {
-  return ["--no-playlist", "--max-filesize", "500M", "--extract-audio", "--audio-format", "m4a", "-f", "bestaudio", "--js-runtimes", "deno", "-o", path.join(outputDirectory, "audio.%(ext)s"), url];
+  return ["--no-playlist", "--max-filesize", "500M", "--extract-audio", "--audio-format", "m4a", "-f", "bestaudio[abr<=64]/worstaudio", "--js-runtimes", "deno", "-o", path.join(outputDirectory, "audio.%(ext)s"), url];
 }
 
 export function buildYouTubeSectionArgs(url: string, startSeconds: number, endSeconds: number, outputPath: string): string[] {

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { createYouTubeDownloadApi } from "./youtube-download-api.ts";
 import path from "node:path";
+import { estimatedAudioBytes } from "./youtube-analysis-api.ts";
 import { buildYouTubeAnalysisArgs, buildYouTubeAudioArgs, buildYouTubeDownloadArgs, buildYouTubeMetadataArgs, buildYouTubeSectionArgs, isYouTubeRateLimitError, validateYouTubeRequest } from "./youtube-download.ts";
 
 test("validates YouTube URLs and normalizes clip timestamps", () => {
@@ -45,8 +46,20 @@ test("builds metadata-only and transcript/chat sidecar yt-dlp commands", () => {
 });
 
 test("builds audio-only fallback and single-section download commands", () => {
-  expect(buildYouTubeAudioArgs("https://youtu.be/abc123", "audio")).toContain("--max-filesize");
+  const args = buildYouTubeAudioArgs("https://youtu.be/abc123", "audio");
+  expect(args).toContain("--max-filesize");
+  expect(args[args.indexOf("-f") + 1]).toBe("bestaudio[abr<=64]/worstaudio");
   expect(buildYouTubeSectionArgs("https://youtu.be/abc123", 90, 125, "clip.mp4")).toContain("*00:01:30-00:02:05");
+});
+
+test("estimates audio fallback size using the low-bitrate transcription format", () => {
+  const formats = [
+    { acodec: "opus", vcodec: "none", abr: 160, filesize: 800_000_000 },
+    { acodec: "opus", vcodec: "none", abr: 48, filesize: 240_000_000 },
+    { acodec: "opus", vcodec: "none", abr: 32, filesize: 160_000_000 },
+  ];
+  expect(estimatedAudioBytes({ duration: 40_000, formats })).toBe(240_000_000);
+  expect(estimatedAudioBytes({ duration: 40_000, formats: [formats[0]!, { ...formats[1]!, abr: 96, filesize: 800_000_000 }] })).toBe(800_000_000);
 });
 
 test("download API rejects invalid sites before starting yt-dlp", async () => {
