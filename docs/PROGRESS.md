@@ -5,7 +5,7 @@ Phase: FACE CAM AUTO-DETECTION | Branch: main
 ## Done
 
 - Added automatic per-clip Gaming facecam location detection from repeated YuNet detections. Gaming gameplay now stays as centered as possible while keeping the facecam outside the crop.
-- Added manual rectangle override on upload, YouTube project creation, single-clip rerender, and project rerender settings.
+- Added manual rectangle override on upload, YouTube project creation, single-clip rerender, and project rerender settings. Rendered preview cache-busts on every completed render.
 - Legacy Gaming projects using the old bottom-right default now auto-detect when rerendered; custom rectangles remain manual. Face tracking follows the selected region.
 - Detection falls back to the Gaming bottom-right default if the model finds no stable face.
 - `bun run check`: typecheck passes; 101 tests pass with 375 assertions.
